@@ -1,0 +1,7 @@
+.idea/*
+build/
+dist/
+keba_kecontact.egg-info/
+venv/
+
+__pycache__

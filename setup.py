@@ -11,7 +11,7 @@ setuptools.setup(
     description="A python library to communicate with the KEBA charging stations via udp",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/dannerph/keba_kecontact",
+    url="https://github.com/dannerph/keba-kecontact",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

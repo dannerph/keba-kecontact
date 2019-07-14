@@ -12,16 +12,32 @@ class KebaKeContact:
     _UDP_IP = None
     _UDP_PORT = 7090
     _setup = False
+    data = {}
 
     def __init__(self, ip, callback):
         """ Constructor. """
         self._UDP_IP = ip
         self._callback = callback
+        self.keba = None
+
+    def _internal_callback(self, data):
+        self.data = data
+        self._callback(data)
+
+    def get_value(self, key):
+        """Return wallbox value for given key if available, otherwise None."""
+        if self.data is None:
+            return None
+        try:
+            value = self.data[key]
+            return value
+        except KeyError:
+            return None
 
     async def setup(self):
         """Add datagram endpoint to asyncio loop."""
         loop = asyncio.get_running_loop()
-        self.keba = KebaProtocol(self._callback)
+        self.keba = KebaProtocol(self._internal_callback)
         await loop.create_datagram_endpoint(lambda: self.keba,
                                             local_addr=('0.0.0.0', self._UDP_PORT),
                                             remote_addr=(self._UDP_IP, self._UDP_PORT))
@@ -36,7 +52,7 @@ class KebaKeContact:
             await self.setup()
 
         await self.keba.send("report 1")
-        await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
+        await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
         await self.keba.send("report 2")
         await asyncio.sleep(0.1)
         await self.keba.send("report 3")
@@ -75,10 +91,10 @@ class KebaKeContact:
             raise ValueError("Energy must be above 1 and below 10000 kWh.")
 
         await self.keba.send('setenergy ' + str(energy * 10000))
-        await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
+        await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
     async def set_current(self, current=0):
-        """Send command to set current limi on KEBA charging station.
+        """Send command to set current limit on KEBA charging station.
 
         This function sets the current limit in A. 0 A stops the charging process similar to ena 0.
         """
@@ -89,7 +105,7 @@ class KebaKeContact:
             raise ValueError("Current must be above 6 and below 63 A.")
 
         await self.keba.send('currtime ' + str(current * 1000) + ' 0')
-        await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
+        await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
     async def start(self, rfid, rfid_class="01010400000000000000"):  # Default color white
         """Authorize a charging process with predefined RFID tag."""
@@ -99,24 +115,27 @@ class KebaKeContact:
         if not all(c in string.hexdigits for c in rfid_class) or len(rfid) > 20:
             raise ValueError("RFID class tag must be a 10 byte hex string.")
 
-        self.send("start " + rfid + ' ' + rfid_class)
+        self.keba.send("start " + rfid + ' ' + rfid_class)
 
     async def stop(self, rfid):
         """Deauthorize a charging process with predefined RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
-        self.send("stop " + rfid)
+        self.keba.send("stop " + rfid)
+        await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
     async def enable(self, ena):
         """Start a charging process."""
-        if ena not in [0,1]:
+        if ena not in [0, 1]:
             raise ValueError("Enable parameter must be 0 or 1.")
-        self.send("ena " + str(ena))
+        self.keba.send("ena " + str(ena))
+        await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
     async def unlock_socket(self):
         """Unlock the socket.
 
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
         """
-        self.send("unlock")
+        self.keba.send("unlock")
+        await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual

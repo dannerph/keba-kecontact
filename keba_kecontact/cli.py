@@ -19,6 +19,8 @@ async def main(ip):
     await keba.request_data()
     await keba.set_failsafe(0, 0, 0)
     await keba.set_energy()
+    await asyncio.sleep(1)
+    print(keba.get_value("Product"))
 
 
 def callback(data):

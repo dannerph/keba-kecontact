@@ -109,6 +109,9 @@ class KebaKeContact:
 
     async def start(self, rfid, rfid_class="01010400000000000000"):  # Default color white
         """Authorize a charging process with predefined RFID tag."""
+        if not self._setup:
+            await self.setup()
+
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
@@ -119,6 +122,9 @@ class KebaKeContact:
 
     async def stop(self, rfid):
         """Deauthorize a charging process with predefined RFID tag."""
+        if not self._setup:
+            await self.setup()
+
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
@@ -127,6 +133,9 @@ class KebaKeContact:
 
     async def enable(self, ena):
         """Start a charging process."""
+        if not self._setup:
+            await self.setup()
+
         if ena not in [0, 1]:
             raise ValueError("Enable parameter must be 0 or 1.")
         self.keba.send("ena " + str(ena))
@@ -137,5 +146,8 @@ class KebaKeContact:
 
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
         """
+        if not self._setup:
+            await self.setup()
+
         self.keba.send("unlock")
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual

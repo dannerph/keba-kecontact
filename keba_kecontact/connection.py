@@ -1,11 +1,8 @@
 #!/usr/bin/python3
 
-from keba_protocol import KebaProtocol
+from keba_kecontact.keba_protocol import KebaProtocol
 import asyncio
-import logging
 import string
-
-_LOGGER = logging.getLogger(__name__)
 
 
 class KebaKeContact:
@@ -14,15 +11,16 @@ class KebaKeContact:
     _setup = False
     data = {}
 
-    def __init__(self, ip, callback):
+    def __init__(self, ip, callback=None):
         """ Constructor. """
         self._UDP_IP = ip
         self._callback = callback
-        self.keba = None
+        self.keba_protocol = None
 
-    def _internal_callback(self, data):
+    def callback(self, data):
         self.data = data
-        self._callback(data)
+        if self._callback is not None:
+            self._callback(data)
 
     def get_value(self, key):
         """Return wallbox value for given key if available, otherwise None."""
@@ -34,16 +32,16 @@ class KebaKeContact:
         except KeyError:
             return None
 
-    async def setup(self):
+    async def setup(self, loop=None, *_):
         """Add datagram endpoint to asyncio loop."""
-        loop = asyncio.get_running_loop()
-        self.keba = KebaProtocol(self._internal_callback)
-        await loop.create_datagram_endpoint(lambda: self.keba,
+        loop = asyncio.get_event_loop() if loop is None else loop
+        self.keba_protocol = KebaProtocol(self.callback)
+        await loop.create_datagram_endpoint(lambda: self.keba_protocol,
                                             local_addr=('0.0.0.0', self._UDP_PORT),
                                             remote_addr=(self._UDP_IP, self._UDP_PORT))
         self._setup = True
 
-    async def request_data(self):
+    async def request_data(self, *_):
         """Send request for KEBA charging station data.
 
         This function requests report 1, report 2 and report 3.
@@ -51,15 +49,15 @@ class KebaKeContact:
         if not self._setup:
             await self.setup()
 
-        await self.keba.send("report 1")
+        self.keba_protocol.send("report 1")
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
-        await self.keba.send("report 2")
+        self.keba_protocol.send("report 2")
         await asyncio.sleep(0.1)
-        await self.keba.send("report 3")
+        self.keba_protocol.send("report 3")
         await asyncio.sleep(0.1)
 
-    async def set_failsafe(self, timeout=30, fallback_value=6, persist=0):
-        """Send command to activate failsave mode on KEBA charging station.
+    async def set_failsafe(self, timeout=30, fallback_value=6, persist=0, *_):
+        """Send command to activate failsafe mode on KEBA charging station.
 
         This function sets the failsafe mode. For deactivation, all parameters must be 0.
         """
@@ -76,10 +74,10 @@ class KebaKeContact:
         if persist not in [0, 1]:
             raise ValueError("Failsafe persist must be 0 or 1.")
 
-        await self.keba.send('failsafe ' + str(timeout) + ' ' + str(fallback_value * 1000) + ' ' + str(persist))
+        self.keba_protocol.send('failsafe ' + str(timeout) + ' ' + str(fallback_value * 1000) + ' ' + str(persist))
         await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
 
-    async def set_energy(self, energy=0):
+    async def set_energy(self, energy=0, *_):
         """Send command to set energy limit on KEBA charging station.
 
         This function sets the energy limit in kWh. For deactivation energy should be 0.
@@ -87,13 +85,13 @@ class KebaKeContact:
         if not self._setup:
             await self.setup()
 
-        if (energy < 1 and energy != 0) or energy >= 10000:
-            raise ValueError("Energy must be above 1 and below 10000 kWh.")
+        if not isinstance(energy, (int, float)) or (energy < 1 and energy != 0) or energy >= 10000:
+            raise ValueError("Energy must be int or float and value must be above 0.0001 kWh and below 10000 kWh.")
 
-        await self.keba.send('setenergy ' + str(energy * 10000))
+        self.keba_protocol.send('setenergy ' + str(energy * 10000))
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def set_current(self, current=0):
+    async def set_current(self, current=0, *_):
         """Send command to set current limit on KEBA charging station.
 
         This function sets the current limit in A. 0 A stops the charging process similar to ena 0.
@@ -101,13 +99,13 @@ class KebaKeContact:
         if not self._setup:
             await self.setup()
 
-        if (current < 6 and current != 0) or current >= 63:
-            raise ValueError("Current must be above 6 and below 63 A.")
+        if not isinstance(current, (int, float)) or (current < 6 and current != 0) or current >= 63:
+            raise ValueError("Current must be int or float and value must be above 6 and below 63 A.")
 
-        await self.keba.send('currtime ' + str(current * 1000) + ' 0')
+        self.keba_protocol.send('currtime ' + str(current * 1000) + ' 1')
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def start(self, rfid, rfid_class="01010400000000000000"):  # Default color white
+    async def start(self, rfid, rfid_class="01010400000000000000", *_):  # Default color white
         """Authorize a charging process with predefined RFID tag."""
         if not self._setup:
             await self.setup()
@@ -118,30 +116,31 @@ class KebaKeContact:
         if not all(c in string.hexdigits for c in rfid_class) or len(rfid) > 20:
             raise ValueError("RFID class tag must be a 10 byte hex string.")
 
-        self.keba.send("start " + rfid + ' ' + rfid_class)
+        self.keba_protocol.send("start " + rfid + ' ' + rfid_class)
+        await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def stop(self, rfid):
-        """Deauthorize a charging process with predefined RFID tag."""
+    async def stop(self, rfid, *_):
+        """De-authorize a charging process with predefined RFID tag."""
         if not self._setup:
             await self.setup()
 
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
-        self.keba.send("stop " + rfid)
+        self.keba_protocol.send("stop " + rfid)
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def enable(self, ena):
+    async def enable(self, ena, *_):
         """Start a charging process."""
         if not self._setup:
             await self.setup()
 
         if ena not in [0, 1]:
             raise ValueError("Enable parameter must be 0 or 1.")
-        self.keba.send("ena " + str(ena))
+        self.keba_protocol.send("ena " + str(ena))
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def unlock_socket(self):
+    async def unlock_socket(self, *_):
         """Unlock the socket.
 
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
@@ -149,5 +148,5 @@ class KebaKeContact:
         if not self._setup:
             await self.setup()
 
-        self.keba.send("unlock")
+        self.keba_protocol.send("unlock")
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual

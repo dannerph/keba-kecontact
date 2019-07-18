@@ -31,7 +31,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
         self.data['Online'] = False
 
     def datagram_received(self, data, addr):
-        """Handle received datagrams."""
+        """Handle received datagram."""
         _LOGGER.debug("Data received.")
         self.data['Online'] = True
         decoded_data = data.decode()
@@ -40,7 +40,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
             _LOGGER.debug("Command accepted: %s", decoded_data)
             return True
 
-        if 'TCH-ERROR' in decoded_data:
+        if 'TCH-ERR' in decoded_data:
             _LOGGER.warning("Command rejected: %s", decoded_data)
             return False
 
@@ -93,7 +93,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
         self.data.update(json_rcv)
         self._callback(self.data)
 
-    async def send(self, payload):
+    def send(self, payload):
         """Send data to KEBA charging station."""
         _LOGGER.debug("Send %s", payload)
         self._transport.sendto(payload.encode())

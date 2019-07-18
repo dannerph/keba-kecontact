@@ -4,7 +4,7 @@
 import asyncio
 import logging
 import sys
-from keba_kecontact import KebaKeContact
+from keba_kecontact.connection import KebaKeContact
 
 logging.basicConfig(
     level=logging.DEBUG,

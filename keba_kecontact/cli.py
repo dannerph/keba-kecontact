@@ -22,6 +22,18 @@ async def main(ip):
     await asyncio.sleep(1)
     print(keba.get_value("Product"))
 
+    print(keba.get_value("uptime_pretty"))
+
+    print(keba.get_value("Plug_plugged"))
+    print(keba.get_value("Plug_wallbox"))
+    print(keba.get_value("Plug_locked"))
+    print(keba.get_value("Plug_EV"))
+
+    print(keba.get_value("State_on"))
+    print(keba.get_value("State_details"))
+
+    print(keba.get_value("FS_on"))
+
 
 def callback(data):
     print(data)

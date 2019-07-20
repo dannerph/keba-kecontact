@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import json
+import datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +51,10 @@ class KebaProtocol(asyncio.DatagramProtocol):
         if 'ID' in json_rcv:
             if json_rcv['ID'] == '1':
                 try:
+                    # Prettify uptime
+                    secs = json_rcv['Sec']
+                    json_rcv['uptime_pretty'] = str(datetime.timedelta(seconds=secs))
+
                     # Extract product version
                     product_string = json_rcv['Product']
                     if "P30" in product_string:
@@ -59,8 +64,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
                     elif "BMW" in product_string:
                         json_rcv['Product'] = "BMW Wallbox"
                 except KeyError:
-                    _LOGGER.warning("Could not extract report 1 data for KEBA "
-                                    "charging station")
+                    _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
             elif json_rcv['ID'] == '2':
                 try:
                     json_rcv['Max curr'] = json_rcv['Max curr'] / 1000.0
@@ -68,11 +72,36 @@ class KebaProtocol(asyncio.DatagramProtocol):
                     json_rcv['Curr user'] = json_rcv['Curr user'] / 1000.0
                     json_rcv['Curr FS'] = json_rcv['Curr FS'] / 1000.0
                     json_rcv['Curr timer'] = json_rcv['Curr timer'] / 1000.0
-                    json_rcv['Setenergy'] = round(
-                        json_rcv['Setenergy'] / 10000.0, 2)
+                    json_rcv['Setenergy'] = round(json_rcv['Setenergy'] / 10000.0, 2)
+
+                    # Extract plug state
+                    plug_state = json_rcv['Plug']
+                    json_rcv['Plug_plugged'] = plug_state > 3
+                    json_rcv["Plug_wallbox"] = plug_state > 0
+                    json_rcv["Plug_locked"] = plug_state == 3 | plug_state == 7
+                    json_rcv["Plug_EV"] = plug_state > 4
+
+                    # Extract charging state
+                    state = json_rcv['State']
+                    json_rcv['State_on'] = state == 3
+                    if state is not None:
+                        switcher = {
+                            0: "starting",
+                            1: "not ready for charging",
+                            2: "ready for charging",
+                            3: "charging",
+                            4: "error",
+                            5: "authorization rejected"
+                        }
+                        json_rcv['State_details'] = switcher.get(
+                            state, "State undefined")
+
+                    # Extract failsafe details
+                    fs = json_rcv['Tmo FS']
+                    json_rcv['FS_on'] = fs == 1
+
                 except KeyError:
-                    _LOGGER.warning("Could not extract report 2 data for KEBA "
-                                    "charging station")
+                    _LOGGER.warning("Could not extract report 2 data for KEBA charging station")
             elif json_rcv['ID'] == '3':
                 try:
                     json_rcv['I1'] = json_rcv['I1'] / 1000.0
@@ -83,8 +112,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
                     json_rcv['E pres'] = round(json_rcv['E pres'] / 10000.0, 2)
                     json_rcv['E total'] = int(json_rcv['E total'] / 10000)
                 except KeyError:
-                    _LOGGER.warning("Could not extract report 3 data for KEBA "
-                                    "charging station")
+                    _LOGGER.warning("Could not extract report 3 data for KEBA charging station")
         else:
             _LOGGER.debug("No ID in response from Keba charging station")
             return False

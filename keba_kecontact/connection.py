@@ -3,13 +3,26 @@
 from keba_kecontact.keba_protocol import KebaProtocol
 import asyncio
 import string
+from dataclasses import dataclass
+
+
+@dataclass
+class DeviceState:
+    state: int
+    @property
+    def is_plugged(self):
+        return self.state > 0
+    @property
+    def is_locked(self):
+        return self.state == 3 | self.state == 7
 
 
 class KebaKeContact:
     _UDP_IP = None
     _UDP_PORT = 7090
     _setup = False
-    data = {}
+
+    device_state = DeviceState()
 
     def __init__(self, ip, callback=None):
         """ Constructor. """
@@ -17,17 +30,14 @@ class KebaKeContact:
         self._callback = callback
         self.keba_protocol = None
 
-    def callback(self, data):
-        self.data = data
+    def callback(self, data_json):
         if self._callback is not None:
-            self._callback(data)
+            self._callback(data_json)
 
     def get_value(self, key):
         """Return wallbox value for given key if available, otherwise None."""
-        if self.data is None:
-            return None
         try:
-            value = self.data[key]
+            value = self.keba_protocol.data[key]
             return value
         except KeyError:
             return None
@@ -135,9 +145,10 @@ class KebaKeContact:
         if not self._setup:
             await self.setup()
 
-        if ena not in [0, 1]:
-            raise ValueError("Enable parameter must be 0 or 1.")
-        self.keba_protocol.send("ena " + str(ena))
+        if not isinstance(ena, bool):
+            raise ValueError("Enable parameter must be True or False.")
+        param_str = 1 if ena else 0
+        self.keba_protocol.send("ena " + str(param_str))
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
     async def unlock_socket(self, *_):

@@ -97,8 +97,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
                             state, "State undefined")
 
                     # Extract failsafe details
-                    fs = json_rcv['Tmo FS']
-                    json_rcv['FS_on'] = fs == 1
+                    json_rcv['FS_on'] = json_rcv['Tmo FS'] > 0
 
                 except KeyError:
                     _LOGGER.warning("Could not extract report 2 data for KEBA charging station")

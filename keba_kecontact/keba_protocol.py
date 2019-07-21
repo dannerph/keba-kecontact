@@ -33,16 +33,16 @@ class KebaProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         """Handle received datagram."""
-        _LOGGER.debug("Data received.")
+        _LOGGER.debug("Datagram received.")
         self.data['Online'] = True
         decoded_data = data.decode()
 
         if 'TCH-OK :done' in decoded_data:
-            _LOGGER.debug("Command accepted: %s", decoded_data)
+            _LOGGER.debug("Command accepted: %s", decoded_data.rstrip())
             return True
 
         if 'TCH-ERR' in decoded_data:
-            _LOGGER.warning("Command rejected: %s", decoded_data)
+            _LOGGER.warning("Command rejected: %s", decoded_data.rstrip())
             return False
 
         json_rcv = json.loads(data.decode())
@@ -63,8 +63,10 @@ class KebaProtocol(asyncio.DatagramProtocol):
                         json_rcv['Product'] = "KEBA P20"
                     elif "BMW" in product_string:
                         json_rcv['Product'] = "BMW Wallbox"
+                    self.data.update(json_rcv)
                 except KeyError:
                     _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
+                return True
             elif json_rcv['ID'] == '2':
                 try:
                     json_rcv['Max curr'] = json_rcv['Max curr'] / 1000.0
@@ -98,9 +100,10 @@ class KebaProtocol(asyncio.DatagramProtocol):
 
                     # Extract failsafe details
                     json_rcv['FS_on'] = json_rcv['Tmo FS'] > 0
-
+                    self.data.update(json_rcv)
                 except KeyError:
                     _LOGGER.warning("Could not extract report 2 data for KEBA charging station")
+                return True
             elif json_rcv['ID'] == '3':
                 try:
                     json_rcv['I1'] = json_rcv['I1'] / 1000.0
@@ -110,6 +113,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
                     json_rcv['PF'] = json_rcv['PF'] / 1000.0
                     json_rcv['E pres'] = round(json_rcv['E pres'] / 10000.0, 2)
                     json_rcv['E total'] = int(json_rcv['E total'] / 10000)
+                    self.data.update(json_rcv)
                 except KeyError:
                     _LOGGER.warning("Could not extract report 3 data for KEBA charging station")
         else:
@@ -117,7 +121,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
             return False
 
         # Join data to internal data store and send it to the callback function
-        self.data.update(json_rcv)
+        _LOGGER.debug("Execute callback")
         self._callback(self.data)
 
     def send(self, payload):

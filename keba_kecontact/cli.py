@@ -16,7 +16,13 @@ logging.basicConfig(
 
 async def main(ip):
     keba = KebaKeContact(ip, callback)
+    await keba.setup()
+
     await keba.request_data()
+
+    print(keba.get_value("Serial"))
+
+#    await keba.request_data()
     await keba.set_failsafe(0, 0, 0)
     await keba.set_energy()
     await asyncio.sleep(1)

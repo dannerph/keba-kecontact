@@ -3,26 +3,12 @@
 from keba_kecontact.keba_protocol import KebaProtocol
 import asyncio
 import string
-from dataclasses import dataclass
-
-
-@dataclass
-class DeviceState:
-    state: int
-    @property
-    def is_plugged(self):
-        return self.state > 0
-    @property
-    def is_locked(self):
-        return self.state == 3 | self.state == 7
 
 
 class KebaKeContact:
     _UDP_IP = None
     _UDP_PORT = 7090
     _setup = False
-
-    device_state = DeviceState()
 
     def __init__(self, ip, callback=None):
         """ Constructor. """
@@ -42,7 +28,7 @@ class KebaKeContact:
         except KeyError:
             return None
 
-    async def setup(self, loop=None, *_):
+    async def setup(self, loop=None):
         """Add datagram endpoint to asyncio loop."""
         loop = asyncio.get_event_loop() if loop is None else loop
         self.keba_protocol = KebaProtocol(self.callback)

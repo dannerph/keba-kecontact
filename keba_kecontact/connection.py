@@ -37,7 +37,7 @@ class KebaKeContact:
                                             remote_addr=(self._UDP_IP, self._UDP_PORT))
         self._setup = True
 
-    async def request_data(self, *_):
+    async def request_data(self):
         """Send request for KEBA charging station data.
 
         This function requests report 1, report 2 and report 3.
@@ -52,7 +52,7 @@ class KebaKeContact:
         self.keba_protocol.send("report 3")
         await asyncio.sleep(0.1)
 
-    async def set_failsafe(self, timeout=30, fallback_value=6, persist=0, *_):
+    async def set_failsafe(self, timeout=30, fallback_value=6, persist=0):
         """Send command to activate failsafe mode on KEBA charging station.
 
         This function sets the failsafe mode. For deactivation, all parameters must be 0.
@@ -73,7 +73,7 @@ class KebaKeContact:
         self.keba_protocol.send('failsafe ' + str(timeout) + ' ' + str(fallback_value * 1000) + ' ' + str(persist))
         await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
 
-    async def set_energy(self, energy=0, *_):
+    async def set_energy(self, energy=0):
         """Send command to set energy limit on KEBA charging station.
 
         This function sets the energy limit in kWh. For deactivation energy should be 0.
@@ -101,7 +101,7 @@ class KebaKeContact:
         self.keba_protocol.send('currtime ' + str(current * 1000) + ' 1')
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def start(self, rfid, rfid_class="01010400000000000000", *_):  # Default color white
+    async def start(self, rfid, rfid_class="01010400000000000000"):  # Default color white
         """Authorize a charging process with predefined RFID tag."""
         if not self._setup:
             await self.setup()
@@ -115,7 +115,7 @@ class KebaKeContact:
         self.keba_protocol.send("start " + rfid + ' ' + rfid_class)
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def stop(self, rfid, *_):
+    async def stop(self, rfid):
         """De-authorize a charging process with predefined RFID tag."""
         if not self._setup:
             await self.setup()
@@ -126,7 +126,7 @@ class KebaKeContact:
         self.keba_protocol.send("stop " + rfid)
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def enable(self, ena, *_):
+    async def enable(self, ena):
         """Start a charging process."""
         if not self._setup:
             await self.setup()
@@ -137,7 +137,7 @@ class KebaKeContact:
         self.keba_protocol.send("ena " + str(param_str))
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 
-    async def unlock_socket(self, *_):
+    async def unlock_socket(self):
         """Unlock the socket.
 
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.

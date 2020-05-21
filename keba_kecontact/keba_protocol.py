@@ -127,4 +127,4 @@ class KebaProtocol(asyncio.DatagramProtocol):
     def send(self, payload):
         """Send data to KEBA charging station."""
         _LOGGER.debug("Send %s", payload)
-        self._transport.sendto(payload.encode())
+        self._transport.sendto(payload.encode('cp437', 'ignore'))

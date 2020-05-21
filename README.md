@@ -33,6 +33,14 @@ This command sets the current limit of the running charging process.
 Parameters:
 - current in ampere (default = 0 A)
 
+### set_text
+This command displays a text on the display of the charger.
+
+Parameters:
+- text to show on the display
+- min time to show the text before next text is shown (default = 2 s)
+- max time to show the text (default = 10 s)
+
 ### start
 This command authorizes a charging process with the given RFID tag and RFID class.
 

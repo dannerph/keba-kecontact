@@ -109,6 +109,9 @@ class KebaKeContact:
         if not isinstance(mintime, (int, float)) or not isinstance(maxtime, (int, float)):
             raise ValueError("Times must be int or float.")
 
+        if mintime < 0 or mintime > 65535 or maxtime < 0 or maxtime > 65535:
+            raise ValueError("Times must be between 0 and 65535")
+
         self.keba_protocol.send("display 1 " + str(int(round(mintime))) + ' ' + str(int(round(maxtime))) + " 0 " + text[0:23])
         await asyncio.sleep(0.1)  # Sleep for 100 ms as given in the manual
 

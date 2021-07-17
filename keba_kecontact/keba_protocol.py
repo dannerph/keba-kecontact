@@ -112,7 +112,7 @@ class KebaProtocol(asyncio.DatagramProtocol):
                     json_rcv['P'] = round(json_rcv['P'] / 1000000.0, 2)
                     json_rcv['PF'] = json_rcv['PF'] / 1000.0
                     json_rcv['E pres'] = round(json_rcv['E pres'] / 10000.0, 2)
-                    json_rcv['E total'] = int(json_rcv['E total'] / 10000)
+                    json_rcv['E total'] = round(json_rcv['E total'] / 10000.0, 2)
                     self.data.update(json_rcv)
                 except KeyError:
                     _LOGGER.warning("Could not extract report 3 data for KEBA charging station")

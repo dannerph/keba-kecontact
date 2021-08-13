@@ -35,6 +35,12 @@ class KebaKeContact:
         await loop.create_datagram_endpoint(lambda: self.keba_protocol,
                                             local_addr=('0.0.0.0', self._UDP_PORT),
                                             remote_addr=(self._UDP_IP, self._UDP_PORT))
+        # Test connection to keba charging station
+        self.keba_protocol.send("report 1")
+        await asyncio.sleep(0.1)
+        if self.get_value("Product") is None:
+            raise ConnectionError('Could not connect to Keba charging station at ' + str(self._UDP_IP) + '.')
+        
         self._setup = True
 
     async def request_data(self):

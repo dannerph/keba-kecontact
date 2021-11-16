@@ -116,6 +116,15 @@ class KebaProtocol(asyncio.DatagramProtocol):
                     self.data.update(json_rcv)
                 except KeyError:
                     _LOGGER.warning("Could not extract report 3 data for KEBA charging station")
+            elif json_rcv['ID'] == '100':
+                try:
+                    json_rcv['E start'] = round(json_rcv['E start'] / 10000.0, 2)
+                    json_rcv['E pres'] = round(json_rcv['E pres'] / 10000.0, 2)
+                    self.data.update(json_rcv)
+                except KeyError:
+                    _LOGGER.warning("Could not extract report 100 data for KEBA charging station")
+            else:
+                _LOGGER.debug("Report ID not known/implemented")
         else:
             _LOGGER.debug("No ID in response from Keba charging station")
             return False

@@ -20,13 +20,16 @@ class KebaKeContact:
         if self._callback is not None:
             self._callback(data_json)
 
-    def get_value(self, key):
-        """Return wallbox value for given key if available, otherwise None."""
-        try:
-            value = self.keba_protocol.data[key]
-            return value
-        except KeyError:
-            return None
+    def get_value(self, key=None):
+        """Return all fetched wallbox values if key is not given. For given key the respective value if available, otherwise None."""
+        if key is None:
+            return self.keba_protocol.data
+        else:
+            try:
+                value = self.keba_protocol.data[key]
+                return value
+            except KeyError:
+                return None
 
     async def setup(self, loop=None):
         """Add datagram endpoint to asyncio loop."""
@@ -56,6 +59,8 @@ class KebaKeContact:
         self.keba_protocol.send("report 2")
         await asyncio.sleep(0.1)
         self.keba_protocol.send("report 3")
+        await asyncio.sleep(0.1)
+        self.keba_protocol.send("report 100")
         await asyncio.sleep(0.1)
 
     async def set_failsafe(self, timeout=30, fallback_value=6, persist=0):

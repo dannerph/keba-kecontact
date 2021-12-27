@@ -13,6 +13,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/dannerph/keba-kecontact",
     packages=setuptools.find_packages(),
+    install_requires=['asyncio_dgram>=2.1.1'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

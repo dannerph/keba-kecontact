@@ -78,7 +78,5 @@ class Emulator:
         except Exception as e:
             payload = "TCH-ERR\n"
 
-        _LOGGER.debug("Send %s to %s", payload)
-        await self._stream.send(
-            payload.encode("cp437", "ignore"), (remote_addr, UDP_PORT)
-        )
+        _LOGGER.debug("Send %s to %s", payload, remote_addr)
+        await self._stream.send(payload.encode("cp437", "ignore"), remote_addr)

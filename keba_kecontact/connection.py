@@ -107,6 +107,8 @@ class KebaKeContact:
                 manufacturer = "KEBA"
             elif "BMW" in model:
                 manufacturer = "BMW"
+            else:
+                manufacturer = "Unkown"
         except KeyError:
             _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
             return None

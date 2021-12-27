@@ -8,7 +8,7 @@ from keba_kecontact.connection import KebaKeContact
 from keba_kecontact.emulator import Emulator
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
@@ -69,7 +69,9 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
 
     if len(sys.argv) < 2:
-        print("Add argument 'emu' to start the keba emulator or one or more space separated IP Addresses to starting listening to these wallboxes.")
+        print(
+            "Add argument 'emu' to start the keba emulator or one or more space separated IP Addresses to starting listening to these wallboxes."
+        )
     elif sys.argv[1] == "emu":
         logging.info("Run an emulated Keba Wallbox on port 7090.")
         loop.create_task(emulation_mode(loop))

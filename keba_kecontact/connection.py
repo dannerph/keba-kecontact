@@ -52,6 +52,7 @@ class KebaKeContact:
         self._setup_info = None
 
         self._wallbox_map.update({host: wb})
+        _LOGGER.info(f"{wb.device_info.manufacturer} Wallbox (Serial: {wb.device_info.device_id}) at {wb.device_info.host} successfully connected.")
         return wb
 
     async def _listen(self):

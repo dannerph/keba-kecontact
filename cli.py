@@ -8,7 +8,7 @@ from keba_kecontact.connection import KebaKeContact
 from keba_kecontact.emulator import Emulator
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
@@ -53,6 +53,11 @@ async def client_mode(loop):
     # wb1.stop("e3f76b8d00000000")
     # wb1.display(1, 0, 0, None, "text")
     # wb1.unlock()
+
+    await asyncio.sleep(30)
+
+    for ip in sys.argv[1:]:
+        keba.remove_wallbox(ip)
 
 
 def callback1(wallbox, data):

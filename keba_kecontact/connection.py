@@ -62,8 +62,9 @@ class KebaKeContact:
         )
         return wb
 
-    async def remove_wallbox(self, host):
+    def remove_wallbox(self, host):
         del self._wallbox_map[host]
+        _LOGGER.debug(f"Wallbox at {host} removed.")
 
     def get_wallboxes(self):
         return list(self._wallbox_map.values())

@@ -27,24 +27,25 @@ class KebaKeContact:
         if self._stream is None:
             self._stream = await asyncio_dgram.bind(("0.0.0.0", UDP_PORT))
             self._loop.create_task(self._listen())
-            _LOGGER.debug("Socket binding created and listerning started.")
+            _LOGGER.debug(f"Socket binding created (0.0.0.0) and listening started on port {UDP_PORT}.")
 
         # check if wallbox is already configured
         if host in self._wallbox_map:
-            _LOGGER.warning("Given wallbox already configured. Abort.")
+            _LOGGER.warning(f"Wallbox at {host} already configured. Abort.")
             return False
 
         # Test connection to new wallbox
         self._setup_event = asyncio.Event()
-        await self._stream.send("report 1".encode("cp437", "ignore"), (host, UDP_PORT))
-        await asyncio.sleep(0.1)
+        async with self._send_lock:
+            await self._stream.send("report 1".encode("cp437", "ignore"), (host, UDP_PORT))
+            await asyncio.sleep(0.1)
 
         # Wait for positive response from wallbox
         try:
-            await asyncio.wait_for(self._setup_event.wait(), timeout=30)
+            await asyncio.wait_for(self._setup_event.wait(), timeout=5)
             self._setup_event = None
         except asyncio.TimeoutError:
-            _LOGGER.warning("Given wallbox has not replied within 30s. Abort.")
+            _LOGGER.warning(f"Wallbox at {host} has not replied within 5s. Abort.")
             return False
 
         # Create wallbox object and add it to observing map
@@ -54,6 +55,31 @@ class KebaKeContact:
         self._wallbox_map.update({host: wb})
         _LOGGER.info(f"{wb.device_info.manufacturer} Wallbox (Serial: {wb.device_info.device_id}) at {wb.device_info.host} successfully connected.")
         return wb
+
+    async def remove_wallbox(self, host):
+        del self._wallbox_map[host]
+
+    def get_wallboxes(self):
+        return self._wallbox_map.values
+
+    def get_wallbox(self, host):
+        return self._wallbox_map.get(host)
+
+    async def send(self, wallbox: Wallbox, payload):
+
+        if (
+            self._stream is None
+            or wallbox.device_info.host not in self._wallbox_map.keys()
+        ):
+            raise ConnectionError("Setup the wallbox before sending.")
+
+        _LOGGER.debug("Send %s to %s", payload, wallbox.device_info.host)
+
+        async with self._send_lock:
+            await self._stream.send(
+                payload.encode("cp437", "ignore"), (wallbox.device_info.host, UDP_PORT)
+            )
+            await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
 
     async def _listen(self):
         data, remote_addr = await self._stream.recv()  # Listen until something received
@@ -75,22 +101,6 @@ class KebaKeContact:
         else:
             wb = self._wallbox_map.get(remote_addr[0])
             self._loop.create_task(wb.datagram_received(data))
-
-    async def send(self, wallbox: Wallbox, payload):
-
-        if (
-            self._stream is None
-            or wallbox.device_info.host not in self._wallbox_map.keys()
-        ):
-            raise ConnectionError("Setup the wallbox before sending.")
-
-        _LOGGER.debug("Send %s to %s", payload, wallbox.device_info.host)
-
-        async with self._send_lock:
-            await self._stream.send(
-                payload.encode("cp437", "ignore"), (wallbox.device_info.host, UDP_PORT)
-            )
-            await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
 
     def _create_device_info(self, host, raw_data):
         json_rcv = json.loads(raw_data.decode())

@@ -27,6 +27,7 @@ class Wallbox(ABC):
         keba,
         device_info: WallboxDeviceInfo,
         loop=None,
+        periodic_request=True,
         refresh_interval=5,
         refresh_interval_fast_polling=1,
     ):
@@ -51,7 +52,12 @@ class Wallbox(ABC):
         self._fast_polling_count = self._fast_polling_count_max
 
         self._polling_task = None
-        self._polling_task = self._loop.create_task(self._periodic_request())
+        if periodic_request:
+            self._polling_task = self._loop.create_task(self._periodic_request())
+
+    def __del__(self):
+        self._polling_task.cancel()
+        _LOGGER.debug(f"Wallbox {self.device_info.model} at {self.device_info.host} deleted.")
 
     def set_callback(self, callback):
         self._callback = callback
@@ -69,7 +75,6 @@ class Wallbox(ABC):
     async def datagram_received(self, data):
         """Handle received datagram."""
         _LOGGER.debug("Datagram received, starting to process.")
-        self.data["Online"] = True
         decoded_data = data.decode()
 
         if "TCH-OK :done" in decoded_data:
@@ -170,15 +175,6 @@ class Wallbox(ABC):
             self._polling_task.cancel()
             self._polling_task = self._loop.create_task(self._periodic_request())
 
-    async def request_data(self):
-        """Send request for KEBA charging station data.
-
-        This function requests report 2, report 3 and report 100.
-        """
-        await self._send("report 2")
-        await self._send("report 3")
-        await self._send("report 100")
-
     async def _periodic_request(self):
         """Send  periodic update requests."""
 
@@ -198,6 +194,15 @@ class Wallbox(ABC):
     ####################################################
     #                   Functions                      #
     ####################################################
+
+    async def request_data(self):
+        """Send request for KEBA charging station data.
+
+        This function requests report 2, report 3 and report 100.
+        """
+        await self._send("report 2")
+        await self._send("report 3")
+        await self._send("report 100")
 
     async def set_failsafe(self, timeout=30, fallback_value=6, persist=0):
         """Send command to activate failsafe mode on KEBA charging station.
@@ -318,3 +323,35 @@ class Wallbox(ABC):
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
         """
         await self._send("unlock")
+
+    async def set_charging_power(self, power):
+        """Set chargig power in kW. EXPERIMENTAL!
+        For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted.
+        """
+
+        # Abort if there is no active charging process
+        if self.get_value('State_on'):
+            _LOGGER.error("Charging power can only be set during active charging process")
+            return False
+        
+        # Identify the number of phases that are used to charge
+        number_of_phases = 0
+        try:
+            p1 = self.get_value('I1') * self.get_value('U1')
+            p2 = self.get_value('I2') * self.get_value('U2')
+            p3 = self.get_value('I3') * self.get_value('U3')
+
+            if p1 > 0:
+                number_of_phases += 1
+            if p2 > 0:
+                number_of_phases += 1
+            if p3 > 0:
+                number_of_phases += 1
+        except:
+            _LOGGER.error("Unable to identify current charging phases")
+            return False
+        
+        # Calculate charging current
+        avg_voltage = (self.get_value('U1') + self.get_value('U2') + self.get_value('U3')) / 3.0
+        current = power / avg_voltage / number_of_phases
+        await self.set_current(current=current)

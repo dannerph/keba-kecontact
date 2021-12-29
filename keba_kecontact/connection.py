@@ -60,7 +60,7 @@ class KebaKeContact:
         del self._wallbox_map[host]
 
     def get_wallboxes(self):
-        return self._wallbox_map.values
+        return list(self._wallbox_map.values())
 
     def get_wallbox(self, host):
         return self._wallbox_map.get(host)
@@ -112,14 +112,19 @@ class KebaKeContact:
             return None
         try:
             device_id = json_rcv["Serial"]
-            model = json_rcv["Product"]
+            manufacturer = "Unkown"
+            product = json_rcv["Product"]
+            model = product.spit('-')[1:]
             sw_version = json_rcv["Firmware"]
-            if "P30" in model or "P20" in model:
+
+            # Friendly name mapping
+            if "KC" in product:
                 manufacturer = "KEBA"
-            elif "BMW" in model:
+            elif "BMW" in product:
                 manufacturer = "BMW"
-            else:
-                manufacturer = "Unkown"
+                if "BMW-10" in product:
+                    model = "Wallbox Plus"
+            
         except KeyError:
             _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
             return None

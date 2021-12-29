@@ -27,7 +27,8 @@ async def client_mode(loop):
             print("Wallbox could not be set up.")
             return
 
-        wb.set_callback(callback)  # Optional
+        wb.add_callback(callback1)  # Optional
+        wb.add_callback(callback2)  # Optional
         print(wb.device_info)
         wbs.append(wb)
 
@@ -54,8 +55,12 @@ async def client_mode(loop):
     # wb1.unlock()
 
 
-def callback(wallbox, data):
-    print(f"{wallbox.device_info.device_id}: {data}")
+def callback1(wallbox, data):
+    print(f"callback function 1: {wallbox.device_info.device_id}: {data}")
+
+
+def callback2(wallbox, data):
+    print(f"callback function 2: {wallbox.device_info.device_id}: {data}")
 
 
 async def emulation_mode(loop):

@@ -40,7 +40,7 @@ class Wallbox(ABC):
         self.device_info = device_info
         self.data = dict()
 
-        self._callback = None
+        self._callbacks = []
 
         # Internal variables
         self._refresh_interval = refresh_interval
@@ -57,12 +57,16 @@ class Wallbox(ABC):
 
     def __del__(self):
         self._polling_task.cancel()
-        _LOGGER.debug(f"Wallbox {self.device_info.model} at {self.device_info.host} deleted.")
+        _LOGGER.debug(
+            f"Wallbox {self.device_info.model} at {self.device_info.host} deleted."
+        )
 
-    def set_callback(self, callback):
-        self._callback = callback
+    def add_callback(self, callback):
+        """Add callback function to be called after new data is received."""
+        self._callbacks.append(callback)
 
     def get_value(self, key):
+        """Get value. If key is None, all data is return, otherwise the respective value or if non existing none is returned."""
         if key is None:
             return self.data
         else:
@@ -159,9 +163,10 @@ class Wallbox(ABC):
             return False
 
         # Join data to internal data store and send it to the callback function
-        if self._callback is not None:
-            _LOGGER.debug("Execute callback")
-            self._callback(self, self.data)
+        for callback in self._callbacks:
+            callback(self, self.data)
+
+        _LOGGER.debug("Executed %d callbacks", len(self._callbacks))
 
     ####################################################
     #            Data Polling Management               #
@@ -330,16 +335,18 @@ class Wallbox(ABC):
         """
 
         # Abort if there is no active charging process
-        if self.get_value('State_on'):
-            _LOGGER.error("Charging power can only be set during active charging process")
+        if self.get_value("State_on"):
+            _LOGGER.error(
+                "Charging power can only be set during active charging process"
+            )
             return False
-        
+
         # Identify the number of phases that are used to charge
         number_of_phases = 0
         try:
-            p1 = self.get_value('I1') * self.get_value('U1')
-            p2 = self.get_value('I2') * self.get_value('U2')
-            p3 = self.get_value('I3') * self.get_value('U3')
+            p1 = self.get_value("I1") * self.get_value("U1")
+            p2 = self.get_value("I2") * self.get_value("U2")
+            p3 = self.get_value("I3") * self.get_value("U3")
 
             if p1 > 0:
                 number_of_phases += 1
@@ -350,8 +357,10 @@ class Wallbox(ABC):
         except:
             _LOGGER.error("Unable to identify current charging phases")
             return False
-        
+
         # Calculate charging current
-        avg_voltage = (self.get_value('U1') + self.get_value('U2') + self.get_value('U3')) / 3.0
+        avg_voltage = (
+            self.get_value("U1") + self.get_value("U2") + self.get_value("U3")
+        ) / 3.0
         current = power / avg_voltage / number_of_phases
         await self.set_current(current=current)

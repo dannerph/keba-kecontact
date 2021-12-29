@@ -27,7 +27,9 @@ class KebaKeContact:
         if self._stream is None:
             self._stream = await asyncio_dgram.bind(("0.0.0.0", UDP_PORT))
             self._loop.create_task(self._listen())
-            _LOGGER.debug(f"Socket binding created (0.0.0.0) and listening started on port {UDP_PORT}.")
+            _LOGGER.debug(
+                f"Socket binding created (0.0.0.0) and listening started on port {UDP_PORT}."
+            )
 
         # check if wallbox is already configured
         if host in self._wallbox_map:
@@ -37,7 +39,9 @@ class KebaKeContact:
         # Test connection to new wallbox
         self._setup_event = asyncio.Event()
         async with self._send_lock:
-            await self._stream.send("report 1".encode("cp437", "ignore"), (host, UDP_PORT))
+            await self._stream.send(
+                "report 1".encode("cp437", "ignore"), (host, UDP_PORT)
+            )
             await asyncio.sleep(0.1)
 
         # Wait for positive response from wallbox
@@ -53,7 +57,9 @@ class KebaKeContact:
         self._setup_info = None
 
         self._wallbox_map.update({host: wb})
-        _LOGGER.info(f"{wb.device_info.manufacturer} Wallbox (Serial: {wb.device_info.device_id}) at {wb.device_info.host} successfully connected.")
+        _LOGGER.info(
+            f"{wb.device_info.manufacturer} Wallbox (Serial: {wb.device_info.device_id}) at {wb.device_info.host} successfully connected."
+        )
         return wb
 
     async def remove_wallbox(self, host):
@@ -114,7 +120,7 @@ class KebaKeContact:
             device_id = json_rcv["Serial"]
             manufacturer = "Unkown"
             product = json_rcv["Product"]
-            model = product.spit('-')[1:]
+            model = product.split("-")[1:]
             sw_version = json_rcv["Firmware"]
 
             # Friendly name mapping
@@ -124,7 +130,7 @@ class KebaKeContact:
                 manufacturer = "BMW"
                 if "BMW-10" in product:
                     model = "Wallbox Plus"
-            
+
         except KeyError:
             _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
             return None

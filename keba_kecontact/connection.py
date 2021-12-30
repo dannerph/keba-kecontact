@@ -23,6 +23,8 @@ class KebaKeContact:
 
     async def setup_wallbox(self, host, **kwargs):
 
+        _LOGGER.debug(f"Start connecting to {host}")
+
         # Bind socket and start listening if not yet done
         if self._stream is None:
             self._stream = await asyncio_dgram.bind(("0.0.0.0", UDP_PORT))
@@ -33,8 +35,10 @@ class KebaKeContact:
 
         # check if wallbox is already configured
         if host in self._wallbox_map:
-            _LOGGER.warning(f"Wallbox at {host} already configured. Abort.")
-            return False
+            _LOGGER.info(
+                f"Wallbox at {host} already configured. Return existing object."
+            )
+            return self._wallbox_map.get(host)
 
         # Test connection to new wallbox
         self._setup_event = asyncio.Event()
@@ -63,8 +67,13 @@ class KebaKeContact:
         return wb
 
     def remove_wallbox(self, host):
-        del self._wallbox_map[host]
-        _LOGGER.debug(f"Wallbox at {host} removed.")
+        if host in self._wallbox_map:
+            del self._wallbox_map[host]
+            _LOGGER.debug(f"Wallbox at {host} removed.")
+        else:
+            _LOGGER.warning(
+                f"Wallbox at {host} could not be removed as it was not configured."
+            )
 
     def get_wallboxes(self):
         return list(self._wallbox_map.values())

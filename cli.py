@@ -28,7 +28,7 @@ async def client_mode(loop):
             return
 
         wb.add_callback(callback1)  # Optional
-        wb.add_callback(callback2)  # Optional
+        # wb.add_callback(callback2)  # Optional
         print(wb.device_info)
         wbs.append(wb)
 
@@ -54,10 +54,16 @@ async def client_mode(loop):
     # wb1.display(1, 0, 0, None, "text")
     # wb1.unlock()
 
-    await asyncio.sleep(30)
+    await asyncio.sleep(10)
 
     for ip in sys.argv[1:]:
         keba.remove_wallbox(ip)
+
+    print("\n clean \n\n")
+
+    print(keba.get_wallboxes())
+
+    # await keba.setup_wallbox("192.168.170.10")
 
 
 def callback1(wallbox, data):

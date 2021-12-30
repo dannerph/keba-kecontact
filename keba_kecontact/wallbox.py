@@ -16,6 +16,7 @@ class WallboxDeviceInfo(ABC):
         self.sw_version = sw_version
         self.webconfigurl = f"http://{host}"
         self.host = host
+        self.display_support = "P30" in model
 
     def __str__(self):
         return f"{self.manufacturer} - {self.model} (device_id: {self.device_id}) - {self.sw_version} running at {self.host}"
@@ -104,7 +105,6 @@ class Wallbox(ABC):
 
                     # Extract plug state
                     plug_state = json_rcv["Plug"]
-                    json_rcv["Plug_plugged"] = plug_state > 3
                     json_rcv["Plug_wallbox"] = plug_state > 0
                     json_rcv["Plug_locked"] = plug_state == 3 | plug_state == 7
                     json_rcv["Plug_EV"] = plug_state > 4
@@ -228,9 +228,9 @@ class Wallbox(ABC):
 
         await self._send(
             "failsafe "
-            + str(timeout)
+            + str(int(timeout))
             + " "
-            + str(fallback_value * 1000)
+            + str(int(fallback_value * 1000))
             + " "
             + str(persist),
             fast_polling=True,
@@ -261,7 +261,7 @@ class Wallbox(ABC):
                 "Delay must be int and value must be between 0 and 860400 seconds."
             )
 
-        await self._send("currtime " + str(current * 1000) + " " + str(delay))
+        await self._send("currtime " + str(int(current * 1000)) + " " + str(delay))
 
     async def set_energy(self, energy=0):
         """Send command to set energy limit on KEBA charging station.
@@ -276,7 +276,7 @@ class Wallbox(ABC):
                 "Energy must be int or float and value must be above 0.0001 kWh and below 10000 kWh."
             )
 
-        await self._send("setenergy " + str(energy * 10000), fast_polling=True)
+        await self._send("setenergy " + str(int(energy * 10000)), fast_polling=True)
 
     async def set_output(self, out: int):
         """Start a charging process."""
@@ -288,7 +288,7 @@ class Wallbox(ABC):
     async def start(
         self, rfid, rfid_class="01010400000000000000"
     ):  # Default color white
-        """Authorize a charging process with predefined RFID tag."""
+        """Authorize a charging process with given RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
@@ -298,7 +298,7 @@ class Wallbox(ABC):
         await self._send("start " + rfid + " " + rfid_class, fast_polling=True)
 
     async def stop(self, rfid: str):
-        """De-authorize a charging process with predefined RFID tag."""
+        """De-authorize a charging process with given RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
@@ -313,6 +313,9 @@ class Wallbox(ABC):
 
         if mintime < 0 or mintime > 65535 or maxtime < 0 or maxtime > 65535:
             raise ValueError("Times must be between 0 and 65535")
+
+        # Formating
+        text = text.replace(" ", "$")  # Will be translated back by the display
 
         await self._send(
             "display 1 "

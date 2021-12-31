@@ -202,7 +202,7 @@ class Wallbox(ABC):
     #                   Functions                      #
     ####################################################
 
-    async def request_data(self) -> None:
+    async def request_data(self, **kwargs) -> None:
         """Send request for KEBA charging station data.
 
         This function requests report 2, report 3 and report 100.
@@ -211,7 +211,9 @@ class Wallbox(ABC):
         await self._send("report 3")
         await self._send("report 100")
 
-    async def set_failsafe(self, timeout=30, fallback_value=6, persist=0) -> None:
+    async def set_failsafe(
+        self, timeout=30, fallback_value=6, persist=0, **kwargs
+    ) -> None:
         """Send command to activate failsafe mode on KEBA charging station.
         This function sets the failsafe mode. For deactivation, all parameters must be 0.
         """
@@ -238,14 +240,14 @@ class Wallbox(ABC):
             fast_polling=True,
         )
 
-    async def set_ena(self, ena: bool) -> None:
+    async def set_ena(self, ena: bool, **kwargs) -> None:
         """Start a charging process."""
         if not isinstance(ena, bool):
             raise ValueError("Enable parameter must be True or False.")
 
         await self._send("ena " + str(1 if ena else 0), fast_polling=True)
 
-    async def set_current(self, current: int | float, delay=0) -> None:
+    async def set_current(self, current: int | float, delay=0, **kwargs) -> None:
         """Send command to set current limit on KEBA charging station.
         This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
         """
@@ -265,7 +267,7 @@ class Wallbox(ABC):
 
         await self._send("currtime " + str(int(current * 1000)) + " " + str(delay))
 
-    async def set_energy(self, energy: int | float = 0) -> None:
+    async def set_energy(self, energy: int | float = 0, **kwargs) -> None:
         """Send command to set energy limit on KEBA charging station.
         This function sets the energy limit in kWh. For deactivation energy should be 0.
         """
@@ -280,7 +282,7 @@ class Wallbox(ABC):
 
         await self._send("setenergy " + str(int(energy * 10000)), fast_polling=True)
 
-    async def set_output(self, out: int) -> None:
+    async def set_output(self, out: int, **kwargs) -> None:
         """Start a charging process."""
         if not isinstance(out, int) or out < 0 or (out > 1 and out < 10) or out > 150:
             raise ValueError("Output parameter must be True or False.")
@@ -288,7 +290,7 @@ class Wallbox(ABC):
         await self._send("output " + str(out))
 
     async def start(
-        self, rfid: str, rfid_class: str = "01010400000000000000"
+        self, rfid: str, rfid_class: str = "01010400000000000000", **kwargs
     ) -> None:  # Default color white
         """Authorize a charging process with given RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
@@ -299,14 +301,16 @@ class Wallbox(ABC):
 
         await self._send("start " + rfid + " " + rfid_class, fast_polling=True)
 
-    async def stop(self, rfid: str) -> None:
+    async def stop(self, rfid: str, **kwargs) -> None:
         """De-authorize a charging process with given RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
         await self._send("stop " + rfid, fast_polling=True)
 
-    async def display(self, text: str, mintime: int = 2, maxtime: int = 10) -> None:
+    async def display(
+        self, text: str, mintime: int = 2, maxtime: int = 10, **kwargs
+    ) -> None:
         """Show a text on the display."""
         if not isinstance(mintime, (int, float)) or not isinstance(
             maxtime, (int, float)
@@ -328,13 +332,13 @@ class Wallbox(ABC):
             + text[0:23]
         )
 
-    async def unlock_socket(self) -> None:
+    async def unlock_socket(self, **kwargs) -> None:
         """Unlock the socket.
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
         """
         await self._send("unlock")
 
-    async def set_charging_power(self, power: int | float) -> None:
+    async def set_charging_power(self, power: int | float, **kwargs) -> None:
         """Set chargig power in kW. EXPERIMENTAL!
         For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted.
         """

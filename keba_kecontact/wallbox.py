@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC
 import logging
 import json
@@ -9,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class WallboxDeviceInfo(ABC):
-    def __init__(self, host, device_id, manufacturer, model, sw_version):
+    def __init__(self, host, device_id, manufacturer, model, sw_version) -> None:
         self.device_id = device_id
         self.manufacturer = manufacturer
         self.model = model
@@ -28,10 +30,10 @@ class Wallbox(ABC):
         keba,
         device_info: WallboxDeviceInfo,
         loop=None,
-        periodic_request=True,
-        refresh_interval=5,
-        refresh_interval_fast_polling=1,
-    ):
+        periodic_request: bool = True,
+        refresh_interval: int = 5,
+        refresh_interval_fast_polling: int = 1,
+    ) -> None:
         """Initialize charging station connection."""
         # super().__init__(host, self.hass_callback)
 
@@ -56,17 +58,17 @@ class Wallbox(ABC):
         if periodic_request:
             self._polling_task = self._loop.create_task(self._periodic_request())
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._polling_task.cancel()
         _LOGGER.debug(
             f"Wallbox {self.device_info.model} at {self.device_info.host} deleted."
         )
 
-    def add_callback(self, callback):
+    def add_callback(self, callback) -> None:
         """Add callback function to be called after new data is received."""
         self._callbacks.append(callback)
 
-    def get_value(self, key):
+    def get_value(self, key: str):
         """Get value. If key is None, all data is return, otherwise the respective value or if non existing none is returned."""
         if key is None:
             return self.data
@@ -172,15 +174,15 @@ class Wallbox(ABC):
     #            Data Polling Management               #
     ####################################################
 
-    async def _send(self, payload: str, fast_polling: bool = False):
-        await self._keba.send(self, payload)
+    async def _send(self, payload: str, fast_polling: bool = False) -> None:
+        await self._keba.send(self.device_info.host, payload)
         if fast_polling:
             _LOGGER.debug("Fast polling enabled")
             self._fast_polling_count = 0
             self._polling_task.cancel()
             self._polling_task = self._loop.create_task(self._periodic_request())
 
-    async def _periodic_request(self):
+    async def _periodic_request(self) -> None:
         """Send  periodic update requests."""
 
         await self.request_data()
@@ -200,7 +202,7 @@ class Wallbox(ABC):
     #                   Functions                      #
     ####################################################
 
-    async def request_data(self):
+    async def request_data(self) -> None:
         """Send request for KEBA charging station data.
 
         This function requests report 2, report 3 and report 100.
@@ -209,7 +211,7 @@ class Wallbox(ABC):
         await self._send("report 3")
         await self._send("report 100")
 
-    async def set_failsafe(self, timeout=30, fallback_value=6, persist=0):
+    async def set_failsafe(self, timeout=30, fallback_value=6, persist=0) -> None:
         """Send command to activate failsafe mode on KEBA charging station.
         This function sets the failsafe mode. For deactivation, all parameters must be 0.
         """
@@ -236,14 +238,14 @@ class Wallbox(ABC):
             fast_polling=True,
         )
 
-    async def set_ena(self, ena):
+    async def set_ena(self, ena: bool) -> None:
         """Start a charging process."""
         if not isinstance(ena, bool):
             raise ValueError("Enable parameter must be True or False.")
 
         await self._send("ena " + str(1 if ena else 0), fast_polling=True)
 
-    async def set_current(self, current, delay=0):
+    async def set_current(self, current: int | float, delay=0) -> None:
         """Send command to set current limit on KEBA charging station.
         This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
         """
@@ -263,7 +265,7 @@ class Wallbox(ABC):
 
         await self._send("currtime " + str(int(current * 1000)) + " " + str(delay))
 
-    async def set_energy(self, energy=0):
+    async def set_energy(self, energy: int | float = 0) -> None:
         """Send command to set energy limit on KEBA charging station.
         This function sets the energy limit in kWh. For deactivation energy should be 0.
         """
@@ -278,7 +280,7 @@ class Wallbox(ABC):
 
         await self._send("setenergy " + str(int(energy * 10000)), fast_polling=True)
 
-    async def set_output(self, out: int):
+    async def set_output(self, out: int) -> None:
         """Start a charging process."""
         if not isinstance(out, int) or out < 0 or (out > 1 and out < 10) or out > 150:
             raise ValueError("Output parameter must be True or False.")
@@ -286,8 +288,8 @@ class Wallbox(ABC):
         await self._send("output " + str(out))
 
     async def start(
-        self, rfid, rfid_class="01010400000000000000"
-    ):  # Default color white
+        self, rfid: str, rfid_class: str = "01010400000000000000"
+    ) -> None:  # Default color white
         """Authorize a charging process with given RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
@@ -297,14 +299,14 @@ class Wallbox(ABC):
 
         await self._send("start " + rfid + " " + rfid_class, fast_polling=True)
 
-    async def stop(self, rfid: str):
+    async def stop(self, rfid: str) -> None:
         """De-authorize a charging process with given RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
         await self._send("stop " + rfid, fast_polling=True)
 
-    async def display(self, text: str, mintime: int = 2, maxtime: int = 10):
+    async def display(self, text: str, mintime: int = 2, maxtime: int = 10) -> None:
         """Show a text on the display."""
         if not isinstance(mintime, (int, float)) or not isinstance(
             maxtime, (int, float)
@@ -326,13 +328,13 @@ class Wallbox(ABC):
             + text[0:23]
         )
 
-    async def unlock_socket(self):
+    async def unlock_socket(self) -> None:
         """Unlock the socket.
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
         """
         await self._send("unlock")
 
-    async def set_charging_power(self, power):
+    async def set_charging_power(self, power: int | float) -> None:
         """Set chargig power in kW. EXPERIMENTAL!
         For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted.
         """

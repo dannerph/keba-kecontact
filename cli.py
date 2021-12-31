@@ -4,7 +4,7 @@
 import asyncio
 import logging
 import sys
-from keba_kecontact.connection import KebaKeContact
+from keba_kecontact.connection import KebaKeContact, SetupError
 from keba_kecontact.emulator import Emulator
 
 logging.basicConfig(
@@ -22,10 +22,13 @@ async def client_mode(loop):
 
     for ip in sys.argv[1:]:
 
-        wb = await keba.setup_wallbox(ip)
-        if not wb:
-            print("Wallbox could not be set up.")
-            return
+        try:
+            device_info = await keba.get_device_info(ip)
+            print(device_info)
+            wb = await keba.setup_wallbox(ip)
+        except SetupError:
+            print(f"Wallbox at {ip} could not be set up. continue with next host")
+            continue
 
         wb.add_callback(callback1)  # Optional
         # wb.add_callback(callback2)  # Optional

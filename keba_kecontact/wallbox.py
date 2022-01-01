@@ -6,6 +6,7 @@ import json
 import string
 import asyncio
 import string
+import datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,7 +99,12 @@ class Wallbox(ABC):
         if "ID" in json_rcv:
             if json_rcv["ID"] == "2":
                 try:
+                    # Prettify uptime
+                    secs = json_rcv["Sec"]
+                    json_rcv["uptime_pretty"] = str(datetime.timedelta(seconds=secs))
+
                     json_rcv["Max curr"] = json_rcv["Max curr"] / 1000.0
+                    json_rcv["Max curr %"] = json_rcv["Max curr %"] / 10.0
                     json_rcv["Curr HW"] = json_rcv["Curr HW"] / 1000.0
                     json_rcv["Curr user"] = json_rcv["Curr user"] / 1000.0
                     json_rcv["Curr FS"] = json_rcv["Curr FS"] / 1000.0
@@ -153,6 +159,7 @@ class Wallbox(ABC):
                 try:
                     json_rcv["E start"] = round(json_rcv["E start"] / 10000.0, 2)
                     json_rcv["E pres"] = round(json_rcv["E pres"] / 10000.0, 2)
+                    json_rcv["Curr HW"] = json_rcv["Curr HW"] / 1000.0
                     self.data.update(json_rcv)
                 except KeyError:
                     _LOGGER.warning(

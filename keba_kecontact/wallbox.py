@@ -112,13 +112,13 @@ class Wallbox(ABC):
                     json_rcv["Setenergy"] = round(json_rcv["Setenergy"] / 10000.0, 2)
 
                     # Extract plug state
-                    plug_state = json_rcv["Plug"]
+                    plug_state = int(json_rcv["Plug"])
                     json_rcv["Plug_wallbox"] = plug_state > 0
                     json_rcv["Plug_locked"] = plug_state == 3 | plug_state == 7
                     json_rcv["Plug_EV"] = plug_state > 4
 
                     # Extract charging state
-                    state = json_rcv["State"]
+                    state = int(json_rcv["State"])
                     json_rcv["State_on"] = state == 3
                     if state is not None:
                         switcher = {
@@ -279,9 +279,9 @@ class Wallbox(ABC):
                 "Delay must be int and value must be between 0 and 860400 seconds."
             )
 
-        await self._send(
-            f"currtime {int(round(current)) * 1000} {delay}", fast_polling=True
-        )
+        current_mA = int(round(current)) * 1000
+        cmd = f"currtime {current_mA} {delay}" if delay > 0 else f"curr {current_mA}"
+        await self._send(cmd, fast_polling=True)
 
     async def set_energy(self, energy: int | float = 0, **kwargs) -> None:
         """Send command to set energy limit on KEBA charging station.

@@ -240,8 +240,16 @@ class Wallbox(ABC):
             fast_polling=True,
         )
 
-    async def set_ena(self, ena: bool, **kwargs) -> None:
+    async def enable(self, **kwargs) -> None:
         """Start a charging process."""
+        await self.set_ena(1)
+
+    async def disable(self, **kwargs) -> None:
+        """Stop a charging process."""
+        await self.set_ena(0)
+
+    async def set_ena(self, ena: bool, **kwargs) -> None:
+        """Set ena."""
         if not isinstance(ena, bool):
             raise ValueError("Enable parameter must be True or False.")
 

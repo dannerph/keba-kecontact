@@ -306,23 +306,28 @@ class Wallbox(ABC):
         await self._send(f"output {out}")
 
     async def start(
-        self, rfid: str, rfid_class: str = "01010400000000000000", **kwargs
+        self, rfid: str = None, rfid_class: str = "01010400000000000000", **kwargs
     ) -> None:  # Default color white
         """Authorize a charging process with given RFID tag."""
-        if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
-            raise ValueError("RFID tag must be a 8 byte hex string.")
+        cmd = "start"
+        if rfid is not None:
+            if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
+                raise ValueError("RFID tag must be a 8 byte hex string.")
+            if not all(c in string.hexdigits for c in rfid_class) or len(rfid) > 20:
+                raise ValueError("RFID class tag must be a 10 byte hex string.")
+            cmd = f"start {rfid} {rfid_class}"
 
-        if not all(c in string.hexdigits for c in rfid_class) or len(rfid) > 20:
-            raise ValueError("RFID class tag must be a 10 byte hex string.")
+        await self._send(cmd, fast_polling=True)
 
-        await self._send(f"start {rfid} {rfid_class}", fast_polling=True)
-
-    async def stop(self, rfid: str, **kwargs) -> None:
+    async def stop(self, rfid: str = None, **kwargs) -> None:
         """De-authorize a charging process with given RFID tag."""
-        if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
-            raise ValueError("RFID tag must be a 8 byte hex string.")
+        cmd = "stop"
+        if rfid is not None:
+            if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
+                raise ValueError("RFID tag must be a 8 byte hex string.")
+            cmd = f"stop {rfid}"
 
-        await self._send(f"stop {rfid}", fast_polling=True)
+        await self._send(cmd, fast_polling=True)
 
     async def display(
         self, text: str, mintime: int | float = 2, maxtime: int | float = 10, **kwargs

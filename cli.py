@@ -33,6 +33,7 @@ async def client_mode(loop):
         wb.add_callback(callback1)  # Optional
         # wb.add_callback(callback2)  # Optional
         print(wb.device_info)
+        # await wb.set_failsafe(0, 0, False)
         wbs.append(wb)
 
     # Data examples

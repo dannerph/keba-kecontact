@@ -212,7 +212,11 @@ class Wallbox(ABC):
         await self._send("report 100")
 
     async def set_failsafe(
-        self, timeout=30, fallback_value=6, persist=0, **kwargs
+        self,
+        timeout: int = 30,
+        fallback_value: int = 6,
+        persist: bool = False,
+        **kwargs,
     ) -> None:
         """Send command to activate failsafe mode on KEBA charging station.
         This function sets the failsafe mode. For deactivation, all parameters must be 0.
@@ -227,16 +231,11 @@ class Wallbox(ABC):
                 "Failsafe fallback value must be between 6 and 63 A or 0 to stop charging."
             )
 
-        if persist not in [0, 1]:
-            raise ValueError("Failsafe persist must be 0 or 1.")
+        if not isinstance(persist, bool):
+            raise ValueError("Failsafe persist must be True or False.")
 
         await self._send(
-            "failsafe "
-            + str(int(timeout))
-            + " "
-            + str(int(fallback_value * 1000))
-            + " "
-            + str(persist),
+            f"failsafe {timeout} {fallback_value * 1000} {1 if persist else 0}",
             fast_polling=True,
         )
 
@@ -253,9 +252,9 @@ class Wallbox(ABC):
         if not isinstance(ena, bool):
             raise ValueError("Enable parameter must be True or False.")
 
-        await self._send("ena " + str(1 if ena else 0), fast_polling=True)
+        await self._send(f"ena {1 if ena else 0}", fast_polling=True)
 
-    async def set_current(self, current: int | float, delay=0, **kwargs) -> None:
+    async def set_current(self, current: int | float, delay: int = 0, **kwargs) -> None:
         """Send command to set current limit on KEBA charging station.
         This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
         """
@@ -273,7 +272,9 @@ class Wallbox(ABC):
                 "Delay must be int and value must be between 0 and 860400 seconds."
             )
 
-        await self._send("currtime " + str(int(current * 1000)) + " " + str(delay))
+        await self._send(
+            f"currtime {int(round(current)) * 1000} {delay}", fast_polling=True
+        )
 
     async def set_energy(self, energy: int | float = 0, **kwargs) -> None:
         """Send command to set energy limit on KEBA charging station.
@@ -288,14 +289,14 @@ class Wallbox(ABC):
                 "Energy must be int or float and value must be above 0.0001 kWh and below 10000 kWh."
             )
 
-        await self._send("setenergy " + str(int(energy * 10000)), fast_polling=True)
+        await self._send(f"setenergy {int(round(energy * 10000))}", fast_polling=True)
 
     async def set_output(self, out: int, **kwargs) -> None:
         """Start a charging process."""
         if not isinstance(out, int) or out < 0 or (out > 1 and out < 10) or out > 150:
             raise ValueError("Output parameter must be True or False.")
 
-        await self._send("output " + str(out))
+        await self._send(f"output {out}")
 
     async def start(
         self, rfid: str, rfid_class: str = "01010400000000000000", **kwargs
@@ -307,17 +308,17 @@ class Wallbox(ABC):
         if not all(c in string.hexdigits for c in rfid_class) or len(rfid) > 20:
             raise ValueError("RFID class tag must be a 10 byte hex string.")
 
-        await self._send("start " + rfid + " " + rfid_class, fast_polling=True)
+        await self._send(f"start {rfid} {rfid_class}", fast_polling=True)
 
     async def stop(self, rfid: str, **kwargs) -> None:
         """De-authorize a charging process with given RFID tag."""
         if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
             raise ValueError("RFID tag must be a 8 byte hex string.")
 
-        await self._send("stop " + rfid, fast_polling=True)
+        await self._send(f"stop {rfid}", fast_polling=True)
 
     async def display(
-        self, text: str, mintime: int = 2, maxtime: int = 10, **kwargs
+        self, text: str, mintime: int | float = 2, maxtime: int | float = 10, **kwargs
     ) -> None:
         """Show a text on the display."""
         if not isinstance(mintime, (int, float)) or not isinstance(
@@ -332,12 +333,7 @@ class Wallbox(ABC):
         text = text.replace(" ", "$")  # Will be translated back by the display
 
         await self._send(
-            "display 1 "
-            + str(int(round(mintime)))
-            + " "
-            + str(int(round(maxtime)))
-            + " 0 "
-            + text[0:23]
+            f"display 1 {int(round(mintime))} {int(round(maxtime))} 0 {text[0:23]}"
         )
 
     async def unlock_socket(self, **kwargs) -> None:
@@ -346,7 +342,7 @@ class Wallbox(ABC):
         """
         await self._send("unlock")
 
-    async def set_charging_power(self, power: int | float, **kwargs) -> None:
+    async def set_charging_power(self, power: int | float, **kwargs) -> bool:
         """Set chargig power in kW. EXPERIMENTAL!
         For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted.
         """
@@ -358,8 +354,15 @@ class Wallbox(ABC):
             )
             return False
 
-        # Identify the number of phases that are used to charge
+        if not isinstance(power, (int, float)):
+            raise ValueError("Power must be int or float.")
+
+        if power < 0 or power > 44.0:
+            raise ValueError("Power must be between 0 and 44 kW.")
+
+        # Identify the number of phases that are used to charge and calculate average voltage of active phases
         number_of_phases = 0
+        avg_voltage = 0.0
         try:
             p1 = self.get_value("I1") * self.get_value("U1")
             p2 = self.get_value("I2") * self.get_value("U2")
@@ -367,17 +370,25 @@ class Wallbox(ABC):
 
             if p1 > 0:
                 number_of_phases += 1
+                avg_voltage += self.get_value("U1")
             if p2 > 0:
                 number_of_phases += 1
+                avg_voltage += self.get_value("U2")
             if p3 > 0:
                 number_of_phases += 1
+                avg_voltage += self.get_value("U3")
+
+            avg_voltage = avg_voltage / number_of_phases
         except:
-            _LOGGER.error("Unable to identify current charging phases")
+            _LOGGER.error("Unable to identify number of charging phases.")
+            return False
+
+        if number_of_phases == 0:
+            _LOGGER.error("No charging process running.")
             return False
 
         # Calculate charging current
-        avg_voltage = (
-            self.get_value("U1") + self.get_value("U2") + self.get_value("U3")
-        ) / 3.0
-        current = power / avg_voltage / number_of_phases
+        current = (power * 1000.0) / avg_voltage / number_of_phases
         await self.set_current(current=current)
+
+        return True

@@ -113,7 +113,8 @@ class KebaKeContact:
         _LOGGER.debug(f"Datagram recvied from {remote_addr}: {data.decode()!r}")
 
         if self._device_info_event:  # waiting for an ID 1 report
-            device_info = self._create_device_info(remote_addr[0], data)
+            report_1_json = json.loads(data.decode())
+            device_info = WallboxDeviceInfo(remote_addr[0], report_1_json)
 
             if device_info:
                 # Check if requested host
@@ -132,38 +133,6 @@ class KebaKeContact:
         else:
             wb = self._wallbox_map.get(remote_addr[0])
             self._loop.create_task(wb.datagram_received(data))
-
-    def _create_device_info(self, host: str, raw_data) -> None:
-        json_rcv = json.loads(raw_data.decode())
-
-        if json_rcv["ID"] != "1":
-            _LOGGER.warning(
-                "Device info extraction for new wallbox not possible. Got wrong response."
-            )
-            return None
-        try:
-            device_id = json_rcv["Serial"]
-            manufacturer = "Unkown"
-            product = json_rcv["Product"]
-            model = product.split("-")[1:]
-            sw_version = json_rcv["Firmware"]
-
-            # Friendly name mapping
-            if "KC" in product:
-                manufacturer = "KEBA"
-                if "P30" in product:
-                    model = "P30"
-                if "P20" in product:
-                    model = "P20"
-            elif "BMW" in product:
-                manufacturer = "BMW"
-                if "BMW-10" in product:
-                    model = "Wallbox Plus"
-
-        except KeyError:
-            _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
-            return None
-        return WallboxDeviceInfo(host, device_id, manufacturer, model, sw_version)
 
 
 class SetupError(Exception):

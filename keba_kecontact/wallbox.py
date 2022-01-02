@@ -12,17 +12,65 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class WallboxDeviceInfo(ABC):
-    def __init__(self, host, device_id, manufacturer, model, sw_version) -> None:
-        self.device_id = device_id
-        self.manufacturer = manufacturer
-        self.model = model
-        self.sw_version = sw_version
+    def __init__(self, host, report_1_json) -> None:
+
         self.webconfigurl = f"http://{host}"
         self.host = host
-        self.display_support = "P30" in model
+
+        if report_1_json["ID"] != "1":
+            _LOGGER.warning(
+                "Device info extraction for new wallbox not possible. Got wrong report response."
+            )
+            return None
+        try:
+            self.device_id = report_1_json["Serial"]
+            self.sw_version = report_1_json["Firmware"]
+
+            self.manufacturer = "Unknown"
+
+            product = report_1_json["Product"]
+            self.model = product.split("-")[1:]
+
+            # Friendly name mapping
+            if "KC" in product:
+                self.manufacturer = "KEBA"
+                if "P30" in product:
+                    self.model = "P30"
+                if "P20" in product:
+                    self.model = "P20"
+            elif "BMW" in product:
+                self.manufacturer = "BMW"
+                if "BMW-10" in product:
+                    self.model = "Wallbox Plus"
+
+        except KeyError:
+            _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
+            return None
 
     def __str__(self):
         return f"manufacturer: {self.manufacturer}\nmodel: {self.model}\ndevice_id (serial number): {self.device_id}\nfirmware version: {self.sw_version}\nhost: {self.host}"
+
+    def available_services(self):
+        services = [
+            "set_failsafe",
+            "request_data",
+            "enable",
+            "disable",
+            "set_current",
+            "unlock_socket",
+            "set_charging_power",
+        ]
+        if "P30" in self.model:
+            services.append("display")
+
+        if "Keba" in self.manufacturer:
+            services.append("set_output")
+
+        if "BMW" in self.manufacturer or "P30" in self.model:
+            services.append("set_energy")
+            services.append("start")
+            services.append("stop")
+        return services
 
 
 class Wallbox(ABC):
@@ -216,7 +264,9 @@ class Wallbox(ABC):
         """
         await self._send("report 2")
         await self._send("report 3")
-        await self._send("report 100")
+
+        if "P20" not in self.device_info.model:
+            await self._send("report 100")
 
     async def set_failsafe(
         self,
@@ -287,6 +337,9 @@ class Wallbox(ABC):
         """Send command to set energy limit on KEBA charging station.
         This function sets the energy limit in kWh. For deactivation energy should be 0.
         """
+        if "P20" in self.device_info.model:
+            raise NotImplementedError("set_energy is not available on the Keba P20.")
+
         if (
             not isinstance(energy, (int, float))
             or (energy < 1 and energy != 0)
@@ -300,6 +353,9 @@ class Wallbox(ABC):
 
     async def set_output(self, out: int, **kwargs) -> None:
         """Start a charging process."""
+        if "BMW" in self.device_info.manufacturer:
+            raise NotImplementedError("output is not available on the BMW Wallbox.")
+
         if not isinstance(out, int) or out < 0 or (out > 1 and out < 10) or out > 150:
             raise ValueError("Output parameter must be True or False.")
 
@@ -309,6 +365,9 @@ class Wallbox(ABC):
         self, rfid: str = None, rfid_class: str = "01010400000000000000", **kwargs
     ) -> None:  # Default color white
         """Authorize a charging process with given RFID tag."""
+        if "P20" in self.device_info.model:
+            raise NotImplementedError("start is not available on the Keba P20.")
+
         cmd = "start"
         if rfid is not None:
             if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
@@ -321,6 +380,9 @@ class Wallbox(ABC):
 
     async def stop(self, rfid: str = None, **kwargs) -> None:
         """De-authorize a charging process with given RFID tag."""
+        if "P20" in self.device_info.model:
+            raise NotImplementedError("stop is not available on the Keba P20.")
+
         cmd = "stop"
         if rfid is not None:
             if not all(c in string.hexdigits for c in rfid) or len(rfid) > 16:
@@ -333,6 +395,9 @@ class Wallbox(ABC):
         self, text: str, mintime: int | float = 2, maxtime: int | float = 10, **kwargs
     ) -> None:
         """Show a text on the display."""
+        if "P30" not in self.device_info.model:
+            raise NotImplementedError("display is only available on the Keba P30.")
+
         if not isinstance(mintime, (int, float)) or not isinstance(
             maxtime, (int, float)
         ):

@@ -74,7 +74,9 @@ class KebaKeContact:
 
     def remove_wallbox(self, host: str) -> None:
         if host in self._wallbox_map:
-            del self._wallbox_map[host]
+            wb = self.get_wallbox(host)
+            wb.stop_periodic_request()
+            self._wallbox_map.pop(host)
             _LOGGER.debug(f"Wallbox at {host} removed.")
         else:
             _LOGGER.warning(
@@ -149,6 +151,10 @@ class KebaKeContact:
             # Friendly name mapping
             if "KC" in product:
                 manufacturer = "KEBA"
+                if "P30" in product:
+                    model = "P30"
+                if "P20" in product:
+                    model = "P20"
             elif "BMW" in product:
                 manufacturer = "BMW"
                 if "BMW-10" in product:

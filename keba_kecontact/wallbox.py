@@ -22,7 +22,7 @@ class WallboxDeviceInfo(ABC):
         self.display_support = "P30" in model
 
     def __str__(self):
-        return f"{self.manufacturer} - {self.model} (device_id: {self.device_id}) - {self.sw_version} running at {self.host}"
+        return f"manufacturer: {self.manufacturer}\nmodel: {self.model}\ndevice_id (serial number): {self.device_id}\nfirmware version: {self.sw_version}\nhost: {self.host}"
 
 
 class Wallbox(ABC):
@@ -59,10 +59,10 @@ class Wallbox(ABC):
         if periodic_request:
             self._polling_task = self._loop.create_task(self._periodic_request())
 
-    def __del__(self) -> None:
+    def stop_periodic_request(self) -> None:
         self._polling_task.cancel()
         _LOGGER.debug(
-            f"Wallbox {self.device_info.model} at {self.device_info.host} deleted."
+            f"Periodic requests for Wallbox {self.device_info.model} at {self.device_info.host} stopped."
         )
 
     def add_callback(self, callback) -> None:

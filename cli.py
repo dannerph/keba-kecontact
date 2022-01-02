@@ -24,8 +24,7 @@ async def client_mode(loop):
 
         try:
             device_info = await keba.get_device_info(ip)
-            print(device_info)
-            wb = await keba.setup_wallbox(ip)
+            wb = await keba.setup_wallbox(ip, refresh_interval=10)
         except SetupError:
             print(f"Wallbox at {ip} could not be set up. continue with next host")
             continue
@@ -58,12 +57,10 @@ async def client_mode(loop):
     # wb1.display(1, 0, 0, None, "text")
     # wb1.unlock()
 
-    await asyncio.sleep(10)
+    await asyncio.sleep(2)
 
     for ip in sys.argv[1:]:
         keba.remove_wallbox(ip)
-
-    print("\n clean \n\n")
 
     print(keba.get_wallboxes())
 

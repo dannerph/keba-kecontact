@@ -8,7 +8,7 @@ from keba_kecontact.connection import KebaKeContact, SetupError
 from keba_kecontact.emulator import Emulator
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
@@ -32,7 +32,8 @@ async def client_mode(loop):
         wb.add_callback(callback1)  # Optional
         # wb.add_callback(callback2)  # Optional
         print(wb.device_info)
-        # await wb.set_failsafe(0, 0, False)
+        await asyncio.sleep(2)
+        await wb.set_charging_power(2.3, True)
         wbs.append(wb)
 
     # Data examples
@@ -57,12 +58,12 @@ async def client_mode(loop):
     # wb1.display(1, 0, 0, None, "text")
     # wb1.unlock()
 
-    await asyncio.sleep(2)
+    # await asyncio.sleep(2)
 
-    for ip in sys.argv[1:]:
-        keba.remove_wallbox(ip)
+    # for ip in sys.argv[1:]:
+    #     keba.remove_wallbox(ip)
 
-    print(keba.get_wallboxes())
+    # print(keba.get_wallboxes())
 
     # await keba.setup_wallbox("192.168.170.10")
 

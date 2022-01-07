@@ -7,6 +7,7 @@ import string
 import asyncio
 import string
 import datetime
+import math
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -419,13 +420,15 @@ class Wallbox(ABC):
         """
         await self._send("unlock")
 
-    async def set_charging_power(self, power: int | float, **kwargs) -> bool:
+    async def set_charging_power(
+        self, power: int | float, round_up: bool = False, **kwargs
+    ) -> bool:
         """Set chargig power in kW. EXPERIMENTAL!
-        For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted.
+        For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted. The given power is the maximum power, current values are rounded down to not overshoot this power value
         """
 
         # Abort if there is no active charging process
-        if self.get_value("State_on"):
+        if not self.get_value("State_on"):
             _LOGGER.error(
                 "Charging power can only be set during active charging process"
             )
@@ -440,24 +443,40 @@ class Wallbox(ABC):
         # Identify the number of phases that are used to charge and calculate average voltage of active phases
         number_of_phases = 0
         avg_voltage = 0.0
+        MINIMUM_POWER = 2  # Watt
         try:
             p1 = self.get_value("I1") * self.get_value("U1")
             p2 = self.get_value("I2") * self.get_value("U2")
             p3 = self.get_value("I3") * self.get_value("U3")
+            _LOGGER.debug(
+                f"set_charging_power phase 1 measurements: {p1}, {self.get_value('I1')}, {self.get_value('U1')}"
+            )
+            _LOGGER.debug(
+                f"set_charging_power phase 2 measurements: {p2}, {self.get_value('I2')}, {self.get_value('U2')}"
+            )
+            _LOGGER.debug(
+                f"set_charging_power phase 3 measurements: {p3}, {self.get_value('I3')}, {self.get_value('U3')}"
+            )
 
-            if p1 > 0:
+            if p1 > MINIMUM_POWER:
                 number_of_phases += 1
                 avg_voltage += self.get_value("U1")
-            if p2 > 0:
+            if p2 > MINIMUM_POWER:
                 number_of_phases += 1
                 avg_voltage += self.get_value("U2")
-            if p3 > 0:
+            if p3 > MINIMUM_POWER:
                 number_of_phases += 1
                 avg_voltage += self.get_value("U3")
 
             avg_voltage = avg_voltage / number_of_phases
+
+            _LOGGER.debug(
+                f"set_charging_power number of phases: {number_of_phases} with average voltage of {avg_voltage}"
+            )
         except:
-            _LOGGER.error("Unable to identify number of charging phases.")
+            _LOGGER.error(
+                "Unable to identify number of charging phases. Probably no measurement values received yet."
+            )
             return False
 
         if number_of_phases == 0:
@@ -465,7 +484,16 @@ class Wallbox(ABC):
             return False
 
         # Calculate charging current
-        current = (power * 1000.0) / avg_voltage / number_of_phases
-        await self.set_current(current=current)
+        current = 0
+        if round_up:
+            current = math.ceil((power * 1000.0) / avg_voltage / number_of_phases)
+        else:
+            current = (
+                (power * 1000.0) / avg_voltage / number_of_phases
+            )  # int cap = round down not to overshoot the maximum
+        try:
+            await self.set_current(current=current)
+        except ValueError as e:
+            _LOGGER.error(f"Could not set calculated current {e}")
 
         return True

@@ -27,7 +27,8 @@ class KebaKeContact:
 
         self._send_lock = asyncio.Lock()
 
-    # async def discover_devices(self):
+    async def discover_devices(self):
+        raise NotImplementedError()
 
     async def get_device_info(self, host: str) -> WallboxDeviceInfo:
 

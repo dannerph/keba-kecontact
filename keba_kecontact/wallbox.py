@@ -105,14 +105,16 @@ class Wallbox(ABC):
         self._fast_polling_count = self._fast_polling_count_max
 
         self._polling_task = None
-        if periodic_request:
+        self._periodic_request_enabled = periodic_request
+        if self._periodic_request_enabled:
             self._polling_task = self._loop.create_task(self._periodic_request())
 
     def stop_periodic_request(self) -> None:
-        self._polling_task.cancel()
-        _LOGGER.debug(
-            f"Periodic requests for Wallbox {self.device_info.model} at {self.device_info.host} stopped."
-        )
+        if self._periodic_request:
+            self._polling_task.cancel()
+            _LOGGER.debug(
+                f"Periodic requests for Wallbox {self.device_info.model} at {self.device_info.host} stopped."
+            )
 
     def add_callback(self, callback) -> None:
         """Add callback function to be called after new data is received."""
@@ -144,81 +146,65 @@ class Wallbox(ABC):
 
         json_rcv = json.loads(data.decode())
 
-        # Prepare received data
-        if "ID" in json_rcv:
-            if json_rcv["ID"] == "2":
-                try:
-                    # Prettify uptime
-                    secs = json_rcv["Sec"]
-                    json_rcv["uptime_pretty"] = str(datetime.timedelta(seconds=secs))
+        # Try to edit json to more human-friendly formats
+        if "Sec" in json_rcv:
+            secs = json_rcv["Sec"]
+            json_rcv["uptime_pretty"] = str(datetime.timedelta(seconds=secs))
 
-                    json_rcv["Max curr"] = json_rcv["Max curr"] / 1000.0
-                    json_rcv["Max curr %"] = json_rcv["Max curr %"] / 10.0
-                    json_rcv["Curr HW"] = json_rcv["Curr HW"] / 1000.0
-                    json_rcv["Curr user"] = json_rcv["Curr user"] / 1000.0
-                    json_rcv["Curr FS"] = json_rcv["Curr FS"] / 1000.0
-                    json_rcv["Curr timer"] = json_rcv["Curr timer"] / 1000.0
-                    json_rcv["Setenergy"] = round(json_rcv["Setenergy"] / 10000.0, 2)
+        # Correct thousands
+        thousands = json_rcv.keys() & [
+            "Max curr %",
+            "Max curr",
+            "Curr HW",
+            "Curr user",
+            "Curr FS",
+            "Curr timer",
+            "I1",
+            "I2",
+            "I3",
+            "PF",
+        ]
+        for k in thousands:
+            json_rcv[k] = json_rcv[k] / 1000.0
 
-                    # Extract plug state
-                    plug_state = int(json_rcv["Plug"])
-                    json_rcv["Plug_wallbox"] = plug_state > 0
-                    json_rcv["Plug_locked"] = plug_state == 3 | plug_state == 7
-                    json_rcv["Plug_EV"] = plug_state > 4
+        if "Max curr %" in json_rcv:
+            json_rcv["Max curr %"] = json_rcv["Max curr %"] / 10.0
 
-                    # Extract charging state
-                    state = int(json_rcv["State"])
-                    json_rcv["State_on"] = state == 3
-                    if state is not None:
-                        switcher = {
-                            0: "starting",
-                            1: "not ready for charging",
-                            2: "ready for charging",
-                            3: "charging",
-                            4: "error",
-                            5: "authorization rejected",
-                        }
-                        json_rcv["State_details"] = switcher.get(
-                            state, "State undefined"
-                        )
+        # Correct ten-thousands, precision 2
+        ten_thousands = json_rcv.keys() & ["Setenergy", "E pres", "E total", "E start"]
+        for k in ten_thousands:
+            json_rcv[k] = round(json_rcv[k] / 10000.0, 2)
 
-                    # Extract failsafe details
-                    json_rcv["FS_on"] = json_rcv["Tmo FS"] > 0
-                    self.data.update(json_rcv)
-                except KeyError:
-                    _LOGGER.warning(
-                        "Could not extract report 2 data for KEBA charging station"
-                    )
-                return True
-            elif json_rcv["ID"] == "3":
-                try:
-                    json_rcv["I1"] = json_rcv["I1"] / 1000.0
-                    json_rcv["I2"] = json_rcv["I2"] / 1000.0
-                    json_rcv["I3"] = json_rcv["I3"] / 1000.0
-                    json_rcv["P"] = round(json_rcv["P"] / 1000000.0, 2)
-                    json_rcv["PF"] = json_rcv["PF"] / 1000.0
-                    json_rcv["E pres"] = round(json_rcv["E pres"] / 10000.0, 2)
-                    json_rcv["E total"] = round(json_rcv["E total"] / 10000.0, 2)
-                    self.data.update(json_rcv)
-                except KeyError:
-                    _LOGGER.warning(
-                        "Could not extract report 3 data for KEBA charging station"
-                    )
-            elif json_rcv["ID"] == "100":
-                try:
-                    json_rcv["E start"] = round(json_rcv["E start"] / 10000.0, 2)
-                    json_rcv["E pres"] = round(json_rcv["E pres"] / 10000.0, 2)
-                    json_rcv["Curr HW"] = json_rcv["Curr HW"] / 1000.0
-                    self.data.update(json_rcv)
-                except KeyError:
-                    _LOGGER.warning(
-                        "Could not extract report 100 data for KEBA charging station"
-                    )
-            else:
-                _LOGGER.debug("Report ID not known/implemented")
-        else:
-            _LOGGER.debug("No ID in response from Keba charging station")
-            return False
+        # Extract plug state
+        if "Plug" in json_rcv:
+            plug_state = int(json_rcv["Plug"])
+            json_rcv["Plug_wallbox"] = plug_state > 0
+            json_rcv["Plug_locked"] = plug_state == 3 | plug_state == 7
+            json_rcv["Plug_EV"] = plug_state > 4
+
+        # Extract charging state
+        if "State" in json_rcv:
+            state = int(json_rcv["State"])
+            json_rcv["State_on"] = state == 3
+            if state is not None:
+                switcher = {
+                    0: "starting",
+                    1: "not ready for charging",
+                    2: "ready for charging",
+                    3: "charging",
+                    4: "error",
+                    5: "authorization rejected",
+                }
+                json_rcv["State_details"] = switcher.get(state, "State undefined")
+
+        # Extract failsafe details
+        if "FS_on" in json_rcv:
+            json_rcv["FS_on"] = json_rcv["Tmo FS"] > 0
+
+        if "P" in json_rcv:
+            json_rcv["P"] = round(json_rcv["P"] / 1000000.0, 2)
+
+        self.data.update(json_rcv)
 
         # Join data to internal data store and send it to the callback function
         for callback in self._callbacks:
@@ -232,7 +218,7 @@ class Wallbox(ABC):
 
     async def _send(self, payload: str, fast_polling: bool = False) -> None:
         await self._keba.send(self.device_info.host, payload)
-        if fast_polling:
+        if self._periodic_request_enabled and fast_polling:
             _LOGGER.debug("Fast polling enabled")
             self._fast_polling_count = 0
             self._polling_task.cancel()
@@ -240,6 +226,12 @@ class Wallbox(ABC):
 
     async def _periodic_request(self) -> None:
         """Send  periodic update requests."""
+
+        if not self._periodic_request_enabled:
+            _LOGGER.warning(
+                "periodic request was not enabled at setup. This error should not appear."
+            )
+            return False
 
         await self.request_data()
 
@@ -299,11 +291,11 @@ class Wallbox(ABC):
 
     async def enable(self, **kwargs) -> None:
         """Start a charging process."""
-        await self.set_ena(1)
+        await self.set_ena(True)
 
     async def disable(self, **kwargs) -> None:
         """Stop a charging process."""
-        await self.set_ena(0)
+        await self.set_ena(False)
 
     async def set_ena(self, ena: bool, **kwargs) -> None:
         """Set ena."""
@@ -429,8 +421,9 @@ class Wallbox(ABC):
 
         # Abort if there is no active charging process
         if not self.get_value("State_on"):
-            _LOGGER.error(
-                "Charging power can only be set during active charging process"
+            await self.set_ena(True)
+            _LOGGER.warning(
+                "Charging power can only be set during active charging process. Sent enable it (in case of active authentication)"
             )
             return False
 
@@ -443,7 +436,9 @@ class Wallbox(ABC):
         # Identify the number of phases that are used to charge and calculate average voltage of active phases
         number_of_phases = 0
         avg_voltage = 0.0
-        MINIMUM_POWER = 2  # Watt
+        MINIMUM_POWER = (
+            2  # Watt to check if a charging process is running on the three phases
+        )
         try:
             p1 = self.get_value("I1") * self.get_value("U1")
             p2 = self.get_value("I2") * self.get_value("U2")
@@ -491,8 +486,26 @@ class Wallbox(ABC):
             current = (
                 (power * 1000.0) / avg_voltage / number_of_phases
             )  # int cap = round down not to overshoot the maximum
+
         try:
-            await self.set_current(current=current)
+            if current == 0:
+                await self.set_ena(False)  # disable if charging power is 0 kW
+            else:
+                # Enable if disabled
+                if (
+                    self.get_value("Enable sys") == 0
+                    or self.get_value("Enable user") == 0
+                ):
+                    await self.set_ena(True)
+
+                if current < 6.0:
+                    await self.set_current(current=6)
+                elif current < 63:
+                    await self.set_current(current=current)
+                else:
+                    _LOGGER.error(
+                        f"Calculated current is much too high, something wrong"
+                    )
         except ValueError as e:
             _LOGGER.error(f"Could not set calculated current {e}")
 

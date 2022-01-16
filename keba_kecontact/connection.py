@@ -13,7 +13,7 @@ UDP_PORT = 7090
 
 
 class KebaKeContact:
-    def __init__(self, loop, device_info_timeout: int = 5):
+    def __init__(self, loop=None, device_info_timeout: int = 5):
         """Constructor."""
         self._loop = loop = asyncio.get_event_loop() if loop is None else loop
 
@@ -26,6 +26,8 @@ class KebaKeContact:
         self._device_info = None
 
         self._send_lock = asyncio.Lock()
+
+    # async def discover_devices(self):
 
     async def get_device_info(self, host: str) -> WallboxDeviceInfo:
 

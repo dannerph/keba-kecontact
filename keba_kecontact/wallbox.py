@@ -204,6 +204,10 @@ class Wallbox(ABC):
         if "P" in json_rcv:
             json_rcv["P"] = round(json_rcv["P"] / 1000000.0, 2)
 
+        # Cleanup invalid values
+        if "Curr HW" in json_rcv and json_rcv["Curr HW"] == 0:
+            json_rcv.pop("Curr HW")
+
         self.data.update(json_rcv)
 
         # Join data to internal data store and send it to the callback function

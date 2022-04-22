@@ -4,6 +4,10 @@
 import asyncio
 import logging
 import sys
+import argparse
+
+import netifaces
+
 from keba_kecontact.connection import KebaKeContact, SetupError
 from keba_kecontact.emulator import Emulator
 
@@ -12,28 +16,62 @@ logging.basicConfig(
     format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
-# logging.getLogger("asyncio").setLevel(logging.DEBUG)
+logging.getLogger("asyncio").setLevel(logging.DEBUG)
+
+INTERVAL = 10
 
 
-async def client_mode(loop):
+async def client_mode(loop, ips):
 
     keba = KebaKeContact(loop)
     wbs = []
 
-    for ip in sys.argv[1:]:
+    def callback1(wallbox, data):
+        print(f"callback function 1: {wallbox.device_info.device_id}: {data}")
+
+    def callback2(wallbox, data):
+        print(f"callback function 2: {wallbox.device_info.device_id}: {data}")
+
+    for ip in ips[0]:
 
         try:
             device_info = await keba.get_device_info(ip)
-            wb = await keba.setup_wallbox(ip, refresh_interval=10)
+            wb = await keba.setup_wallbox(ip, refresh_interval=5, periodic_request=True)
         except SetupError:
-            print(f"Wallbox at {ip} could not be set up. continue with next host")
+            print(
+                f"Wallbox at {ip} could not be set up. continue with next IP address."
+            )
             continue
 
         wb.add_callback(callback1)  # Optional
         # wb.add_callback(callback2)  # Optional
         print(wb.device_info)
-        await asyncio.sleep(2)
-        await wb.set_charging_power(2.3, True)
+
+        await wb.request_data()
+
+        # await asyncio.sleep(INTERVAL)
+
+        # await wb.set_ena(True)
+
+        # await asyncio.sleep(INTERVAL)
+        # await wb.set_charging_power(2.3, False)
+        # print("2.3 kW")
+
+        # await asyncio.sleep(INTERVAL)
+        # await wb.set_charging_power(0.5, False)
+        # print("0.5 kW")
+
+        # # await asyncio.sleep(INTERVAL)
+        # # await wb.set_charging_power(45.0, False)
+        # # print("45 kW")
+
+        # await asyncio.sleep(INTERVAL)
+        # await wb.set_charging_power(0, False)
+        # print("0 kW")
+
+        # await asyncio.sleep(INTERVAL)
+        # await wb.set_charging_power(2.3, False)
+        # print("2.3 kW")
         wbs.append(wb)
 
     # Data examples
@@ -68,33 +106,50 @@ async def client_mode(loop):
     # await keba.setup_wallbox("192.168.170.10")
 
 
-def callback1(wallbox, data):
-    print(f"callback function 1: {wallbox.device_info.device_id}: {data}")
-
-
-def callback2(wallbox, data):
-    print(f"callback function 2: {wallbox.device_info.device_id}: {data}")
-
-
 async def emulation_mode(loop):
     emu = Emulator(loop)
     await emu.start()
     logging.info("Emulator started.")
 
 
+async def discovery_mode(loop):
+    keba = KebaKeContact(loop)
+
+    for interface in netifaces.interfaces():
+        data = netifaces.ifaddresses(interface)
+        ipv4 = data.get(2)
+        if ipv4 is not None:
+            broadcast_addr = ipv4[0].get("broadcast")
+            devices = await keba.discover_devices(broadcast_addr=broadcast_addr)
+            logging.info(f"Discovered devices: {devices}")
+            for d in devices:
+                await keba.setup_wallbox(
+                    host=d, refresh_interval=10, periodic_request=True
+                )
+
+
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(description="Add some integers.")
+    parser.add_argument(
+        "--emu", help="run charging station emulator", action="store_true"
+    )
+    parser.add_argument(
+        "--ip", help="list of IPs to connect to.", action="append", nargs="+"
+    )
+
+    args = parser.parse_args()
+
     loop = asyncio.get_event_loop()
-
-    if len(sys.argv) < 2:
-        print(
-            "Add argument 'emu' to start the keba emulator or one or more space separated IP Addresses to starting listening to these wallboxes."
-        )
-    elif sys.argv[1] == "emu":
-        logging.info("Run an emulated Keba Wallbox on port 7090.")
+    if args.emu:
+        logging.info("Run an emulated Keba charging station on port 7090.")
         loop.create_task(emulation_mode(loop))
-    else:
+    elif args.ip:
         logging.info("Run Keba CLI in client mode to connect to given IP addresses.")
-        loop.create_task(client_mode(loop))
-
+        loop.create_task(client_mode(loop, args.ip))
+    else:
+        logging.info(
+            "No IPs given to connect, trying to discovery the charging stations."
+        )
+        loop.create_task(discovery_mode(loop))
     loop.run_forever()

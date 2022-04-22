@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import List
 
 import asyncio
 import asyncio_dgram
@@ -13,22 +14,36 @@ UDP_PORT = 7090
 
 
 class KebaKeContact:
-    def __init__(self, loop=None, device_info_timeout: int = 5):
+    def __init__(self, loop=None, timeout: int = 5):
         """Constructor."""
         self._loop = loop = asyncio.get_event_loop() if loop is None else loop
 
         self._stream = None
         self._wallbox_map = dict()
 
-        self._device_info_timeout = device_info_timeout
+        self._timeout = timeout
+        self._send_lock = asyncio.Lock()
+
+        # discovery
+        self._discovery_event = None
+        self._found_hosts = []
+
+        # device info fetching
         self._device_info_event = None
         self._device_info_host = None
         self._device_info = None
 
-        self._send_lock = asyncio.Lock()
+    async def discover_devices(self, broadcast_addr) -> List[str]:
 
-    async def discover_devices(self):
-        raise NotImplementedError()
+        _LOGGER.debug(f"Discover devices in {broadcast_addr}")
+
+        self._discovery_event = asyncio.Event()
+
+        await self.send(broadcast_addr, "i")
+        await asyncio.sleep(self._timeout)
+
+        self._discovery_event = None
+        return self._found_hosts
 
     async def get_device_info(self, host: str) -> WallboxDeviceInfo:
 
@@ -42,11 +57,11 @@ class KebaKeContact:
         # Wait for positive response from host
         try:
             await asyncio.wait_for(
-                self._device_info_event.wait(), timeout=self._device_info_timeout
+                self._device_info_event.wait(), timeout=self._timeout
             )
         except asyncio.TimeoutError:
             _LOGGER.warning(
-                f"Wallbox at {host} has not replied within {self._device_info_timeout }s. Abort."
+                f"Wallbox at {host} has not replied within {self._timeout }s. Abort."
             )
             raise SetupError("Could not get device info")
         finally:
@@ -129,6 +144,11 @@ class KebaKeContact:
                     _LOGGER.warning(
                         "Received device info from another host that was not requested"
                     )
+        if self._discovery_event:  # waiting for discovery ("i")
+            if remote_addr not in self._found_hosts:
+                if "Firmware" in data.decode():
+                    self._found_hosts.append(remote_addr[0])
+                    _LOGGER.debug(f"Found device with IP address {remote_addr}.")
 
         # callback datagram received on respective wallbox
         if remote_addr[0] not in self._wallbox_map:

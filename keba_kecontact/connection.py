@@ -3,6 +3,7 @@ from typing import List
 
 import asyncio
 import asyncio_dgram
+import socket
 import logging
 import json
 
@@ -14,7 +15,7 @@ UDP_PORT = 7090
 
 
 class KebaKeContact:
-    def __init__(self, loop=None, timeout: int = 5):
+    def __init__(self, loop=None, timeout: int = 1):
         """Constructor."""
         self._loop = loop = asyncio.get_event_loop() if loop is None else loop
 
@@ -35,7 +36,7 @@ class KebaKeContact:
 
     async def discover_devices(self, broadcast_addr) -> List[str]:
 
-        _LOGGER.debug(f"Discover devices in {broadcast_addr}")
+        _LOGGER.info(f"Discover devices in {broadcast_addr}")
 
         self._discovery_event = asyncio.Event()
 
@@ -113,6 +114,10 @@ class KebaKeContact:
         # Bind socket and start listening if not yet done
         if self._stream is None:
             self._stream = await asyncio_dgram.bind(("0.0.0.0", UDP_PORT))
+            
+            if hasattr(socket,'SO_BROADCAST'):
+                self._stream.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
             self._loop.create_task(self._listen())
             _LOGGER.debug(
                 f"Socket binding created (0.0.0.0) and listening started on port {UDP_PORT}."
@@ -128,7 +133,7 @@ class KebaKeContact:
         self._loop.create_task(self._internal_callback(data, remote_addr))  # Callback
 
     async def _internal_callback(self, data, remote_addr) -> None:
-        _LOGGER.debug(f"Datagram recvied from {remote_addr}: {data.decode()!r}")
+        _LOGGER.debug(f"Datagram received from {remote_addr}: {data.decode()!r}")
 
         if self._device_info_event:  # waiting for an ID 1 report
             report_1_json = json.loads(data.decode())

@@ -8,6 +8,7 @@ import asyncio
 import string
 import datetime
 import math
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,24 +42,22 @@ class WallboxDeviceInfo(ABC):
                     self.model = "P20"
             elif "BMW" in product:
                 self.manufacturer = "BMW"
-                if "BMW-10" in product:
+                if "BMW-10-EC2405B2-E1R" in product:
+                    self.model = "Wallbox Connect"
+                if "BMW-10-EC240522-E1R" in product:
                     self.model = "Wallbox Plus"
 
         except KeyError:
             _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
             return None
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"manufacturer: {self.manufacturer}\nmodel: {self.model}\ndevice_id (serial number): {self.device_id}\nfirmware version: {self.sw_version}\nhost: {self.host}"
 
-    def available_services(self):
+    def available_services(self) -> list[str]:
         services = [
             "set_failsafe",
-            "request_data",
-            "enable",
-            "disable",
             "set_current",
-            "unlock_socket",
             "set_charging_power",
         ]
         if "P30" in self.model:
@@ -120,7 +119,7 @@ class Wallbox(ABC):
         """Add callback function to be called after new data is received."""
         self._callbacks.append(callback)
 
-    def get_value(self, key: str):
+    def get_value(self, key: str) -> Any:
         """Get value. If key is None, all data is return, otherwise the respective value or if non existing none is returned."""
         if key is None:
             return self.data
@@ -131,7 +130,7 @@ class Wallbox(ABC):
             except KeyError:
                 return None
 
-    async def datagram_received(self, data):
+    async def datagram_received(self, data) -> None:
         """Handle received datagram."""
         _LOGGER.debug("Datagram received, starting to process.")
         decoded_data = data.decode()
@@ -315,7 +314,7 @@ class Wallbox(ABC):
         if (
             not isinstance(current, (int, float))
             or (current < 6 and current != 0)
-            or current >= 63
+            or current > 63
         ):
             raise ValueError(
                 "Current must be int or float and value must be above 6 and below 63 A."
@@ -373,6 +372,7 @@ class Wallbox(ABC):
                 raise ValueError("RFID class tag must be a 10 byte hex string.")
             cmd = f"start {rfid} {rfid_class}"
 
+        await self.set_ena(True)
         await self._send(cmd, fast_polling=True)
 
     async def stop(self, rfid: str = None, **kwargs) -> None:
@@ -423,26 +423,23 @@ class Wallbox(ABC):
         For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted. The given power is the maximum power, current values are rounded down to not overshoot this power value
         """
 
-        # Abort if there is no active charging process
-        if not self.get_value("State_on"):
-            await self.set_ena(True)
-            _LOGGER.warning(
-                "Charging power can only be set during active charging process. Sent enable it (in case of active authentication)"
-            )
-            return False
-
         if not isinstance(power, (int, float)):
             raise ValueError("Power must be int or float.")
 
         if power < 0 or power > 44.0:
             raise ValueError("Power must be between 0 and 44 kW.")
 
+        # Abort if there is no active charging process
+        if not self.get_value("State_on"):
+            await self.set_ena(True)
+            _LOGGER.warning(
+                "Charging power can only be set during active charging process. Tried to enable it."
+            )
+            return False
+
         # Identify the number of phases that are used to charge and calculate average voltage of active phases
         number_of_phases = 0
         avg_voltage = 0.0
-        MINIMUM_POWER = (
-            2  # Watt to check if a charging process is running on the three phases
-        )
         try:
             p1 = self.get_value("I1") * self.get_value("U1")
             p2 = self.get_value("I2") * self.get_value("U2")
@@ -457,6 +454,7 @@ class Wallbox(ABC):
                 f"set_charging_power phase 3 measurements: {p3}, {self.get_value('I3')}, {self.get_value('U3')}"
             )
 
+            MINIMUM_POWER = 2
             if p1 > MINIMUM_POWER:
                 number_of_phases += 1
                 avg_voltage += self.get_value("U1")

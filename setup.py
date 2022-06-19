@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="keba_kecontact",
-    version="2.2.2",
+    version="2.2.6",
     author="Philipp Danner",
     author_email="philipp@danner-web.de",
     description="A python library to communicate with the KEBA charging stations via udp",

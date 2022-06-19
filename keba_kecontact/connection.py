@@ -14,8 +14,22 @@ _LOGGER = logging.getLogger(__name__)
 UDP_PORT = 7090
 
 
-class KebaKeContact:
-    def __init__(self, loop=None, timeout: int = 1):
+class SingletonMeta(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        """
+        Possible changes to the value of the `__init__` argument do not affect
+        the returned instance.
+        """
+        if cls not in cls._instances:
+            instance = super().__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        return cls._instances[cls]
+
+
+class KebaKeContact(metaclass=SingletonMeta):
+    def __init__(self, loop=None, timeout: int = 3):
         """Constructor."""
         self._loop = loop = asyncio.get_event_loop() if loop is None else loop
 
@@ -30,6 +44,7 @@ class KebaKeContact:
         self._found_hosts = []
 
         # device info fetching
+        self._device_info_lock = asyncio.Lock()
         self._device_info_event = None
         self._device_info_host = None
         self._device_info = None
@@ -47,28 +62,27 @@ class KebaKeContact:
         return self._found_hosts
 
     async def get_device_info(self, host: str) -> WallboxDeviceInfo:
+        async with self._device_info_lock:
+            _LOGGER.debug(f"Requesting device info from {host}")
 
-        _LOGGER.debug(f"Requesting device info from {host}")
+            self._device_info_event = asyncio.Event()
+            self._device_info_host = host
 
-        self._device_info_event = asyncio.Event()
-        self._device_info_host = host
+            await self.send(host, "report 1")
 
-        await self.send(host, "report 1")
-
-        # Wait for positive response from host
-        try:
-            await asyncio.wait_for(
-                self._device_info_event.wait(), timeout=self._timeout
-            )
-        except asyncio.TimeoutError:
-            _LOGGER.warning(
-                f"Wallbox at {host} has not replied within {self._timeout }s. Abort."
-            )
-            raise SetupError("Could not get device info")
-        finally:
-            self._device_info_event = None
-
-        return self._device_info
+            # Wait for positive response from host
+            try:
+                await asyncio.wait_for(
+                    self._device_info_event.wait(), timeout=self._timeout
+                )
+            except asyncio.TimeoutError:
+                _LOGGER.warning(
+                    f"Wallbox at {host} has not replied within {self._timeout }s. Abort."
+                )
+                raise SetupError("Could not get device info")
+            finally:
+                self._device_info_event = None
+            return self._device_info
 
     async def setup_wallbox(self, host: str, **kwargs) -> Wallbox:
 
@@ -109,21 +123,23 @@ class KebaKeContact:
         return self._wallbox_map.get(host)
 
     async def send(self, host: str, payload: str) -> None:
-        _LOGGER.debug("Send %s to %s", payload, host)
-
-        # Bind socket and start listening if not yet done
-        if self._stream is None:
-            self._stream = await asyncio_dgram.bind(("0.0.0.0", UDP_PORT))
-            
-            if hasattr(socket,'SO_BROADCAST'):
-                self._stream.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-            self._loop.create_task(self._listen())
-            _LOGGER.debug(
-                f"Socket binding created (0.0.0.0) and listening started on port {UDP_PORT}."
-            )
-
         async with self._send_lock:
+            _LOGGER.debug("Send %s to %s", payload, host)
+
+            # Bind socket and start listening if not yet done
+            if self._stream is None:
+                self._stream = await asyncio_dgram.bind(("0.0.0.0", UDP_PORT))
+
+                if hasattr(socket, "SO_BROADCAST"):
+                    self._stream.socket.setsockopt(
+                        socket.SOL_SOCKET, socket.SO_BROADCAST, 1
+                    )
+
+                self._loop.create_task(self._listen())
+                _LOGGER.debug(
+                    f"Socket binding created (0.0.0.0) and listening started on port {UDP_PORT}."
+                )
+
             await self._stream.send(payload.encode("cp437", "ignore"), (host, UDP_PORT))
             await asyncio.sleep(0.1)  # Sleep for 100ms as given in the manual
 

@@ -29,43 +29,48 @@ class SingletonMeta(type):
 
 
 class KebaKeContact(metaclass=SingletonMeta):
-    def __init__(self, loop=None, timeout: int = 3):
+    def __init__(self, loop: asyncio.AbstractEventLoop | None = None, timeout: int = 3):
         """Constructor."""
-        self._loop = loop = asyncio.get_event_loop() if loop is None else loop
+        self._loop: asyncio.AbstractEventLoop = (
+            asyncio.get_event_loop() if loop is None else loop
+        )
 
         self._stream = None
         self._wallbox_map = dict()
 
-        self._timeout = timeout
-        self._send_lock = asyncio.Lock()
+        self._timeout: int = timeout
+        self._send_lock: asyncio.Lock = asyncio.Lock()
 
         # discovery
-        self._discovery_event = None
-        self._found_hosts = []
+        self._discovery_event: asyncio.Event = asyncio.Event()
+        self._discovery_event.set()
+        self._found_hosts: list[str] = []
 
         # device info fetching
-        self._device_info_lock = asyncio.Lock()
-        self._device_info_event = None
-        self._device_info_host = None
-        self._device_info = None
+        self._device_info_lock: asyncio.Lock = asyncio.Lock()
+        self._device_info_event: asyncio.Event = asyncio.Event()
+        self._device_info_event.set()
+        self._device_info_host: str = ""
+        self._device_info: WallboxDeviceInfo | None = None
 
     async def discover_devices(self, broadcast_addr) -> List[str]:
 
         _LOGGER.info(f"Discover devices in {broadcast_addr}")
 
-        self._discovery_event = asyncio.Event()
+        self._discovery_event.clear()
 
         await self.send(broadcast_addr, "i")
         await asyncio.sleep(self._timeout)
+        
+        self._discovery_event.set()
 
-        self._discovery_event = None
         return self._found_hosts
 
     async def get_device_info(self, host: str) -> WallboxDeviceInfo:
         async with self._device_info_lock:
             _LOGGER.debug(f"Requesting device info from {host}")
 
-            self._device_info_event = asyncio.Event()
+            self._device_info_event.clear()
             self._device_info_host = host
 
             await self.send(host, "report 1")
@@ -80,8 +85,6 @@ class KebaKeContact(metaclass=SingletonMeta):
                     f"Wallbox at {host} has not replied within {self._timeout }s. Abort."
                 )
                 raise SetupError("Could not get device info")
-            finally:
-                self._device_info_event = None
             return self._device_info
 
     async def setup_wallbox(self, host: str, **kwargs) -> Wallbox:
@@ -97,6 +100,14 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         # Get device info and create wallbox object and add it to observing map
         device_info = await self.get_device_info(host)
+        
+        for wb in self._wallbox_map:
+            if wb.device_info.device_id == device_info.device_id:
+                _LOGGER.info(f"Found same wallbox (Serial: {device_info.device_id}) on a different IP address ({wb.device_info.host}). Updating device info ...")
+                wb.device_info = device_info
+                return wb
+        
+        # Wallbox not known, thus create a new instance for it
         wallbox = Wallbox(self, device_info, self._loop, **kwargs)
         self._wallbox_map.update({host: wallbox})
 
@@ -151,7 +162,7 @@ class KebaKeContact(metaclass=SingletonMeta):
     async def _internal_callback(self, data, remote_addr) -> None:
         _LOGGER.debug(f"Datagram received from {remote_addr}: {data.decode()!r}")
 
-        if self._device_info_event:  # waiting for an ID 1 report
+        if not self._device_info_event.is_set():  # waiting for an ID 1 report
             report_1_json = json.loads(data.decode())
             device_info = WallboxDeviceInfo(remote_addr[0], report_1_json)
 
@@ -159,13 +170,13 @@ class KebaKeContact(metaclass=SingletonMeta):
                 # Check if requested host
                 if device_info.host == self._device_info_host:
                     self._device_info = device_info
-                    self._device_info_host = None
+                    self._device_info_host = ""
                     self._device_info_event.set()
                 else:
                     _LOGGER.warning(
                         "Received device info from another host that was not requested"
                     )
-        if self._discovery_event:  # waiting for discovery ("i")
+        if not self._discovery_event.is_set():  # waiting for discovery ("i")
             if remote_addr not in self._found_hosts:
                 if "Firmware" in data.decode():
                     self._found_hosts.append(remote_addr[0])

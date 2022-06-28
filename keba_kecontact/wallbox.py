@@ -120,7 +120,7 @@ class Wallbox(ABC):
         self._callbacks.append(callback)
 
     def get_value(self, key: str) -> Any:
-        """Get value. If key is None, all data is return, otherwise the respective value or if non existing none is returned."""
+        """Get value. If key is None, all data is return, otherwise the respective value or if non-existing key none is returned."""
         if key is None:
             return self.data
         else:
@@ -136,12 +136,12 @@ class Wallbox(ABC):
         decoded_data = data.decode()
 
         if "TCH-OK :done" in decoded_data:
-            _LOGGER.debug("Command accepted: %s", decoded_data.rstrip())
-            return True
+            _LOGGER.debug("Last command accepted: %s", decoded_data.rstrip())
+            return
 
         if "TCH-ERR" in decoded_data:
-            _LOGGER.warning("Command rejected: %s", decoded_data.rstrip())
-            return False
+            _LOGGER.warning("Last command rejected: %s", decoded_data.rstrip())
+            return
 
         json_rcv = json.loads(data.decode())
 

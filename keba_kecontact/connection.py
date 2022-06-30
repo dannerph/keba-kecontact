@@ -104,7 +104,12 @@ class KebaKeContact(metaclass=SingletonMeta):
                 _LOGGER.info(
                     f"Found same wallbox (Serial: {device_info.device_id}{wb.device_info.host}) on a different IP address ({device_info.host}). Updating device info ..."
                 )
+                # re-write wallbox object
                 wb.device_info = device_info
+
+                # update map key               
+                self._wallbox_map[host] = self._wallbox_map.pop(wb.device_info.host)
+
                 return wb
 
         # Wallbox not known, thus create a new instance for it

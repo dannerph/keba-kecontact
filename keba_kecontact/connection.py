@@ -39,7 +39,6 @@ class KebaKeContact(metaclass=SingletonMeta):
         self._wallbox_map = dict()
 
         self._timeout: int = timeout
-        self._send_lock: asyncio.Lock = asyncio.Lock()
 
         # discovery
         self._discovery_event: asyncio.Event = asyncio.Event()
@@ -47,7 +46,6 @@ class KebaKeContact(metaclass=SingletonMeta):
         self._found_hosts: list[str] = []
 
         # device info fetching
-        self._device_info_lock: asyncio.Lock = asyncio.Lock()
         self._device_info_event: asyncio.Event = asyncio.Event()
         self._device_info_event.set()
         self._device_info_host: str = ""
@@ -61,13 +59,13 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         await self.send(broadcast_addr, "i")
         await asyncio.sleep(self._timeout)
-        
+
         self._discovery_event.set()
 
         return self._found_hosts
 
     async def get_device_info(self, host: str) -> WallboxDeviceInfo:
-        async with self._device_info_lock:
+        async with asyncio.Lock():
             _LOGGER.debug(f"Requesting device info from {host}")
 
             self._device_info_event.clear()
@@ -100,13 +98,15 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         # Get device info and create wallbox object and add it to observing map
         device_info = await self.get_device_info(host)
-        
+
         for wb in self._wallbox_map:
             if wb.device_info.device_id == device_info.device_id:
-                _LOGGER.info(f"Found same wallbox (Serial: {device_info.device_id}) on a different IP address ({wb.device_info.host}). Updating device info ...")
+                _LOGGER.info(
+                    f"Found same wallbox (Serial: {device_info.device_id}) on a different IP address ({wb.device_info.host}). Updating device info ..."
+                )
                 wb.device_info = device_info
                 return wb
-        
+
         # Wallbox not known, thus create a new instance for it
         wallbox = Wallbox(self, device_info, self._loop, **kwargs)
         self._wallbox_map.update({host: wallbox})
@@ -134,7 +134,7 @@ class KebaKeContact(metaclass=SingletonMeta):
         return self._wallbox_map.get(host)
 
     async def send(self, host: str, payload: str) -> None:
-        async with self._send_lock:
+        async with asyncio.Lock():
             _LOGGER.debug("Send %s to %s", payload, host)
 
             # Bind socket and start listening if not yet done

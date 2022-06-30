@@ -72,6 +72,9 @@ class WallboxDeviceInfo(ABC):
             services.append("stop")
         return services
 
+    def __str__(self) -> str:
+        return f"{self.manufacturer} {self.model} (Serial number: {self.device_id}, SW-Version: {self.sw_version}): {self.host}"
+
 
 class Wallbox(ABC):
     def __init__(
@@ -107,6 +110,8 @@ class Wallbox(ABC):
         self._periodic_request_enabled = periodic_request
         if self._periodic_request_enabled:
             self._polling_task = self._loop.create_task(self._periodic_request())
+
+        self._charging_started_event: asyncio.Event = asyncio.Event()
 
     def stop_periodic_request(self) -> None:
         if self._periodic_request:
@@ -212,6 +217,13 @@ class Wallbox(ABC):
         # Join data to internal data store and send it to the callback function
         for callback in self._callbacks:
             callback(self, self.data)
+
+        if (
+            int(self.get_value("State")) == 3
+            and "ID" in json_rcv
+            and "3" in json_rcv["ID"]
+        ):
+            self._charging_started_event.set()
 
         _LOGGER.debug("Executed %d callbacks", len(self._callbacks))
 
@@ -417,10 +429,14 @@ class Wallbox(ABC):
         await self._send("unlock")
 
     async def set_charging_power(
-        self, power: int | float, round_up: bool = False, **kwargs
+        self,
+        power: int | float,
+        round_up: bool = False,
+        stop_below_6_A: bool = True,
+        **kwargs,
     ) -> bool:
-        """Set chargig power in kW. EXPERIMENTAL!
-        For this command you have to start a charging process first. Afterwards the charging power in kW can be adjusted. The given power is the maximum power, current values are rounded down to not overshoot this power value
+        """Set charging power in kW.
+        For this command you have to authorize a charging process first. Afterwards the charging power in kW can be adjusted. The given power is the maximum power, current values are rounded down by default to not overshoot this power value.
         """
 
         if not isinstance(power, (int, float)):
@@ -429,13 +445,26 @@ class Wallbox(ABC):
         if power < 0 or power > 44.0:
             raise ValueError("Power must be between 0 and 44 kW.")
 
-        # Abort if there is no active charging process
-        if not self.get_value("State_on"):
-            await self.set_ena(True)
+        # Abort if there is no authorized charging process
+        if self.get_value("Authreq") == 1:
             _LOGGER.warning(
-                "Charging power can only be set during active charging process. Tried to enable it."
+                "Charging station is not authorized. Please authorize first, then run set_charging_power again."
             )
             return False
+
+        if not self.get_value("State_on"):
+            _LOGGER.info(
+                "Charging process is authorized but stopped. The function now tries to enable it and waits for its start."
+            )
+            self._charging_started_event.clear()
+            await self.set_ena(True)
+            try:
+                await asyncio.wait_for(self._charging_started_event.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                _LOGGER.warning(
+                    f"Charging process could not be started after 10 seconds. Abort."
+                )
+                return False
 
         # Identify the number of phases that are used to charge and calculate average voltage of active phases
         number_of_phases = 0
@@ -465,6 +494,10 @@ class Wallbox(ABC):
                 number_of_phases += 1
                 avg_voltage += self.get_value("U3")
 
+            if number_of_phases == 0:
+                _LOGGER.error("No charging process running.")
+                return False
+
             avg_voltage = avg_voltage / number_of_phases
 
             _LOGGER.debug(
@@ -476,18 +509,12 @@ class Wallbox(ABC):
             )
             return False
 
-        if number_of_phases == 0:
-            _LOGGER.error("No charging process running.")
-            return False
-
         # Calculate charging current
         current = 0
-        if round_up:
-            current = math.ceil((power * 1000.0) / avg_voltage / number_of_phases)
-        else:
-            current = (
-                (power * 1000.0) / avg_voltage / number_of_phases
-            )  # int cap = round down not to overshoot the maximum
+        current = (power * 1000.0) / avg_voltage / number_of_phases
+        current = (
+            math.ceil(current) if round_up else int(current)
+        )  # int cap = round down not to overshoot the maximum
 
         try:
             if current == 0:
@@ -501,13 +528,17 @@ class Wallbox(ABC):
                     await self.set_ena(True)
 
                 if current < 6.0:
-                    await self.set_current(current=6)
+                    if stop_below_6_A:
+                        await self.set_ena(False)
+                    else:
+                        await self.set_current(current=6)
                 elif current < 63:
                     await self.set_current(current=current)
                 else:
                     _LOGGER.error(
                         f"Calculated current is much too high, something wrong"
                     )
+                    return False
         except ValueError as e:
             _LOGGER.error(f"Could not set calculated current {e}")
 

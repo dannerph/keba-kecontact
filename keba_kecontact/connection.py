@@ -99,10 +99,10 @@ class KebaKeContact(metaclass=SingletonMeta):
         # Get device info and create wallbox object and add it to observing map
         device_info = await self.get_device_info(host)
 
-        for wb in self._wallbox_map:
+        for wb in self.get_wallboxes():
             if wb.device_info.device_id == device_info.device_id:
                 _LOGGER.info(
-                    f"Found same wallbox (Serial: {device_info.device_id}) on a different IP address ({wb.device_info.host}). Updating device info ..."
+                    f"Found same wallbox (Serial: {device_info.device_id}{wb.device_info.host}) on a different IP address ({device_info.host}). Updating device info ..."
                 )
                 wb.device_info = device_info
                 return wb

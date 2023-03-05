@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 """Simple executable to demonstrate and test the usage of the library."""
 
+import argparse
 import asyncio
 import logging
 import sys
-import argparse
 
 import netifaces
 
@@ -22,7 +22,6 @@ INTERVAL = 10
 
 
 async def client_mode(loop, ips):
-
     keba = KebaKeContact(loop)
     wbs = []
 
@@ -33,7 +32,6 @@ async def client_mode(loop, ips):
         print(f"callback function 2: {wallbox.device_info.device_id}: {data}")
 
     for ip in ips[0]:
-
         try:
             device_info = await keba.get_device_info(ip)
             wb = await keba.setup_wallbox(ip, refresh_interval=5, periodic_request=True)
@@ -106,30 +104,40 @@ async def client_mode(loop, ips):
     # await keba.setup_wallbox("192.168.170.10")
 
 
-async def emulation_mode(loop):
-    emu = Emulator(loop)
+async def emulation_mode(asyncio_loop: asyncio.AbstractEventLoop):
+    """Starts an emulator
+
+    Args:
+        asyncio_loop (asyncio.AbstractEventLoop): asyncio event loop
+    """
+    emu = Emulator(asyncio_loop)
     await emu.start()
     logging.info("Emulator started.")
 
 
-async def discovery_mode(loop):
-    keba = KebaKeContact(loop)
+async def discovery_mode(asyncio_loop: asyncio.AbstractEventLoop):
+    """Starts a discovery on all aailable network interfaces
+
+    Args:
+        loop (asyncio.AbstractEventLoop): asyncio event loop
+    """
+    keba = KebaKeContact(asyncio_loop)
 
     for interface in netifaces.interfaces():
         data = netifaces.ifaddresses(interface)
         ipv4 = data.get(2)
         if ipv4 is not None:
             broadcast_addr = ipv4[0].get("broadcast")
-            devices = await keba.discover_devices(broadcast_addr=broadcast_addr)
-            logging.info(f"Discovered devices: {devices}")
-            for d in devices:
-                await keba.setup_wallbox(
-                    host=d, refresh_interval=10, periodic_request=True
-                )
+            if broadcast_addr is not None:
+                devices = await keba.discover_devices(broadcast_addr=broadcast_addr)
+                logging.info("Discovered devices: %s", devices)
+                for d in devices:
+                    await keba.setup_wallbox(
+                        host=d, refresh_interval=10, periodic_request=True
+                    )
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description="Add some integers.")
     parser.add_argument(
         "--emu", help="run charging station emulator", action="store_true"

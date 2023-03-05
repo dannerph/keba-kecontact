@@ -1,23 +1,37 @@
 from __future__ import annotations
 
-from abc import ABC
-import logging
-import json
-import string
 import asyncio
-import string
 import datetime
+import json
+import logging
 import math
+import string
+from abc import ABC
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class WallboxDeviceInfo(ABC):
-    def __init__(self, host, report_1_json) -> None:
+    """This class represents a Keba Wallbox Device information object. It is used to identify
+    features and available services
 
+    Args:
+        ABC (_type_): _description_
+    """
+
+    def __init__(self, host, report_1_json) -> None:
         self.webconfigurl = f"http://{host}"
         self.host = host
+
+        # Features
+        self.services = [
+            "set_failsafe",
+            "set_current",
+            "set_charging_power",
+        ]
+        self.meter_integrated = False
+        self.data_logger_integrated = False
 
         if report_1_json["ID"] != "1":
             _LOGGER.warning(
@@ -36,44 +50,63 @@ class WallboxDeviceInfo(ABC):
             # Friendly name mapping
             if "KC" in product:
                 self.manufacturer = "KEBA"
-                if "P30" in product:
+                self.services.append("set_output")
+
+                if "KC-P30-EC220112-000-DE" in product:
+                    self.model = "P30-DE"
+                    self.meter_integrated = False
+                    self.data_logger_integrated = True
+                elif "P30" in product:
                     self.model = "P30"
-                if "P20" in product:
+
+                    # Add available services
+                    self.services.append("display")
+                    self.services.append("set_energy")
+                    self.services.append("start")
+                    self.services.append("stop")
+
+                    self.meter_integrated = True
+                    self.data_logger_integrated = True
+
+                elif "P20" in product:
                     self.model = "P20"
+                    self.meter_integrated = False
+                    self.data_logger_integrated = False
             elif "BMW" in product:
                 self.manufacturer = "BMW"
                 if "BMW-10-EC2405B2-E1R" in product:
                     self.model = "Wallbox Connect"
-                if "BMW-10-EC240522-E1R" in product:
+                elif "BMW-10-EC240522-E1R" in product:
                     self.model = "Wallbox Plus"
+
+                # Add available services
+                self.services.append("set_energy")
+                self.services.append("start")
+                self.services.append("stop")
+
+                self.meter_integrated = True
+                self.data_logger_integrated = True
 
         except KeyError:
             _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
             return None
 
+    def available_services(self) -> list[str]:
+        """Get available services as a list of method name strings
+
+        Returns:
+            list[str]: list of services
+        """
+        return self.services
+
+    def is_meter_integrated(self) -> bool:
+        return self.meter_integrated
+
+    def is_data_logger_integrated(self) -> bool:
+        return self.data_logger_integrated
+
     def __str__(self) -> str:
         return f"manufacturer: {self.manufacturer}\nmodel: {self.model}\ndevice_id (serial number): {self.device_id}\nfirmware version: {self.sw_version}\nhost: {self.host}"
-
-    def available_services(self) -> list[str]:
-        services = [
-            "set_failsafe",
-            "set_current",
-            "set_charging_power",
-        ]
-        if "P30" in self.model:
-            services.append("display")
-
-        if "Keba" in self.manufacturer:
-            services.append("set_output")
-
-        if "BMW" in self.manufacturer or "P30" in self.model:
-            services.append("set_energy")
-            services.append("start")
-            services.append("stop")
-        return services
-
-    def __str__(self) -> str:
-        return f"{self.manufacturer} {self.model} (Serial number: {self.device_id}, SW-Version: {self.sw_version}): {self.host}"
 
 
 class Wallbox(ABC):
@@ -83,8 +116,8 @@ class Wallbox(ABC):
         device_info: WallboxDeviceInfo,
         loop=None,
         periodic_request: bool = True,
-        refresh_interval: int = 5,
-        refresh_interval_fast_polling: int = 1,
+        refresh_interval_s: int = 5,
+        refresh_interval_fast_polling_s: int = 1,
     ) -> None:
         """Initialize charging station connection."""
         # super().__init__(host, self.hass_callback)
@@ -93,13 +126,15 @@ class Wallbox(ABC):
 
         self._keba = keba
         self.device_info = device_info
-        self.data = dict()
+        self.data = {}
 
         self._callbacks = []
 
         # Internal variables
-        self._refresh_interval = refresh_interval
-        self._refresh_interval_fast_polling = refresh_interval_fast_polling
+        self._refresh_interval = max(refresh_interval_s, 5)  # at least 5 seconds
+        self._refresh_interval_fast_polling = max(
+            refresh_interval_fast_polling_s, 1
+        )  # at least 1 second
 
         self._fast_polling_count_max = int(
             self._refresh_interval * 2 / self._refresh_interval_fast_polling
@@ -113,11 +148,30 @@ class Wallbox(ABC):
 
         self._charging_started_event: asyncio.Event = asyncio.Event()
 
+    def update_device_info(self, device_info: WallboxDeviceInfo) -> None:
+        """Updates the device info in the wallbox object
+
+        Args:
+            device_info (WallboxDeviceInfo): new device info
+        """
+        # Stop periodic requests
+        self.stop_periodic_request()
+
+        # Exchange device info
+        self.device_info = device_info
+
+        # Start periodic requests if enabled
+        if self._periodic_request_enabled:
+            self._polling_task = self._loop.create_task(self._periodic_request())
+
     def stop_periodic_request(self) -> None:
-        if self._periodic_request:
+        """This method stops the peridodic data reqeusts."""
+        if self._polling_task is not None:
             self._polling_task.cancel()
             _LOGGER.debug(
-                f"Periodic requests for Wallbox {self.device_info.model} at {self.device_info.host} stopped."
+                "Periodic requests for Wallbox %s at %s stopped.",
+                self.device_info.model,
+                self.device_info.host,
             )
 
     def add_callback(self, callback) -> None:
@@ -125,15 +179,14 @@ class Wallbox(ABC):
         self._callbacks.append(callback)
 
     def get_value(self, key: str) -> Any:
-        """Get value. If key is None, all data is return, otherwise the respective value or if non-existing key none is returned."""
+        """Get value. If key is None, all data is return, otherwise the respective value or if
+        non-existing key none is returned."""
         if key is None:
             return self.data
-        else:
-            try:
-                value = self.data[key]
-                return value
-            except KeyError:
-                return None
+        try:
+            return self.data[key]
+        except KeyError:
+            return None
 
     async def datagram_received(self, data) -> None:
         """Handle received datagram."""
@@ -202,7 +255,7 @@ class Wallbox(ABC):
                 json_rcv["State_details"] = switcher.get(state, "State undefined")
 
         # Extract failsafe details
-        if "FS_on" in json_rcv:
+        if "Tmo FS" in json_rcv:
             json_rcv["FS_on"] = json_rcv["Tmo FS"] > 0
 
         if "P" in json_rcv:
@@ -231,8 +284,10 @@ class Wallbox(ABC):
     #            Data Polling Management               #
     ####################################################
 
-    async def _send(self, payload: str, fast_polling: bool = False) -> None:
-        await self._keba.send(self.device_info.host, payload)
+    async def _send(
+        self, payload: str, fast_polling: bool = False, blocking_time_s: int = 0
+    ) -> None:
+        await self._keba.send(self.device_info.host, payload, blocking_time_s)
         if self._periodic_request_enabled and fast_polling:
             _LOGGER.debug("Fast polling enabled")
             self._fast_polling_count = 0
@@ -265,23 +320,29 @@ class Wallbox(ABC):
     #                   Functions                      #
     ####################################################
 
-    async def request_data(self, **kwargs) -> None:
+    async def request_data(
+        self,
+        **kwargs,  # pylint: disable=unused-argument
+    ) -> None:
         """Send request for KEBA charging station data.
 
         This function requests report 2, report 3 and report 100.
         """
         await self._send("report 2")
-        await self._send("report 3")
 
-        if "P20" not in self.device_info.model:
+        if self.device_info.is_meter_integrated():
+            await self._send("report 3")
+
+        if self.device_info.is_data_logger_integrated():
             await self._send("report 100")
 
     async def set_failsafe(
         self,
+        mode: bool = True,
         timeout: int = 30,
         fallback_value: int = 6,
         persist: bool = False,
-        **kwargs,
+        **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Send command to activate failsafe mode on KEBA charging station.
         This function sets the failsafe mode. For deactivation, all parameters must be 0.
@@ -299,27 +360,49 @@ class Wallbox(ABC):
         if not isinstance(persist, bool):
             raise ValueError("Failsafe persist must be True or False.")
 
-        await self._send(
-            f"failsafe {timeout} {fallback_value * 1000} {1 if persist else 0}",
-            fast_polling=True,
-        )
+        if not isinstance(mode, bool):
+            raise ValueError("Failsafe mode must be True or False.")
 
-    async def enable(self, **kwargs) -> None:
+        if mode:
+            await self._send(
+                f"failsafe {timeout} {fallback_value * 1000} {1 if persist else 0}",
+                fast_polling=True,
+            )
+        else:
+            await self._send(
+                f"failsafe 0 0 {1 if persist else 0}",
+                fast_polling=True,
+            )
+
+    async def enable(self, **kwargs) -> None:  # pylint: disable=unused-argument
         """Start a charging process."""
         await self.set_ena(True)
 
-    async def disable(self, **kwargs) -> None:
+    async def disable(self, **kwargs) -> None:  # pylint: disable=unused-argument
         """Stop a charging process."""
         await self.set_ena(False)
 
-    async def set_ena(self, ena: bool, **kwargs) -> None:
+    async def set_ena(
+        self, ena: bool, **kwargs  # pylint: disable=unused-argument
+    ) -> None:
         """Set ena."""
         if not isinstance(ena, bool):
             raise ValueError("Enable parameter must be True or False.")
+        if ena:
+            # enable
+            await self._send(f"ena {1 if ena else 0}", fast_polling=True)
+        else:
+            # disable and block 2 seconds
+            await self._send(
+                f"ena {1 if ena else 0}", fast_polling=True, blocking_time_s=2
+            )
 
-        await self._send(f"ena {1 if ena else 0}", fast_polling=True)
-
-    async def set_current(self, current: int | float, delay: int = 0, **kwargs) -> None:
+    async def set_current(
+        self,
+        current: int | float,
+        delay: int = 0,
+        **kwargs,  # pylint: disable=unused-argument
+    ) -> None:  # pylint: disable=unused-argument
         """Send command to set current limit on KEBA charging station.
         This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
         """
@@ -337,16 +420,26 @@ class Wallbox(ABC):
                 "Delay must be int and value must be between 0 and 860400 seconds."
             )
 
-        current_mA = int(round(current)) * 1000
-        cmd = f"currtime {current_mA} {delay}" if delay > 0 else f"curr {current_mA}"
-        await self._send(cmd, fast_polling=True)
+        current_mA = int(round(current)) * 1000  # pylint: disable=invalid-name
+        if "P20" in self.device_info.model:
+            cmd = f"curr {current_mA}"
+            await self._send(cmd, fast_polling=True)
+        else:
+            cmd = (
+                f"currtime {current_mA} {delay}" if delay > 0 else f"curr {current_mA}"
+            )
+            await self._send(cmd, fast_polling=True)
 
-    async def set_energy(self, energy: int | float = 0, **kwargs) -> None:
+    async def set_energy(
+        self, energy: int | float = 0, **kwargs  # pylint: disable=unused-argument
+    ) -> None:
         """Send command to set energy limit on KEBA charging station.
         This function sets the energy limit in kWh. For deactivation energy should be 0.
         """
-        if "P20" in self.device_info.model:
-            raise NotImplementedError("set_energy is not available on the Keba P20.")
+        if "set_energy" not in self.device_info.services:
+            raise NotImplementedError(
+                "set_energy is not available for the given wallbox."
+            )
 
         if (
             not isinstance(energy, (int, float))
@@ -359,10 +452,14 @@ class Wallbox(ABC):
 
         await self._send(f"setenergy {int(round(energy * 10000))}", fast_polling=True)
 
-    async def set_output(self, out: int, **kwargs) -> None:
+    async def set_output(
+        self, out: int, **kwargs  # pylint: disable=unused-argument
+    ) -> None:
         """Start a charging process."""
-        if "BMW" in self.device_info.manufacturer:
-            raise NotImplementedError("output is not available on the BMW Wallbox.")
+        if "set_output" not in self.device_info.services:
+            raise NotImplementedError(
+                "set_output is not available for the given wallbox."
+            )
 
         if not isinstance(out, int) or out < 0 or (out > 1 and out < 10) or out > 150:
             raise ValueError("Output parameter must be True or False.")
@@ -370,11 +467,14 @@ class Wallbox(ABC):
         await self._send(f"output {out}")
 
     async def start(
-        self, rfid: str = None, rfid_class: str = "01010400000000000000", **kwargs
-    ) -> None:  # Default color white
-        """Authorize a charging process with given RFID tag."""
-        if "P20" in self.device_info.model:
-            raise NotImplementedError("start is not available on the Keba P20.")
+        self,
+        rfid: str = None,
+        rfid_class: str = "01010400000000000000",
+        **kwargs,  # pylint: disable=unused-argument
+    ) -> None:
+        """Authorize a charging process with given RFID tag. Default rfid calss is color white"""
+        if "start" not in self.device_info.services:
+            raise NotImplementedError("start is not available for the given wallbox.")
 
         cmd = "start"
         if rfid is not None:
@@ -385,12 +485,14 @@ class Wallbox(ABC):
             cmd = f"start {rfid} {rfid_class}"
 
         await self.set_ena(True)
-        await self._send(cmd, fast_polling=True)
+        await self._send(cmd, fast_polling=True, blocking_time_s=1)
 
-    async def stop(self, rfid: str = None, **kwargs) -> None:
+    async def stop(
+        self, rfid: str = None, **kwargs  # pylint: disable=unused-argument
+    ) -> None:
         """De-authorize a charging process with given RFID tag."""
-        if "P20" in self.device_info.model:
-            raise NotImplementedError("stop is not available on the Keba P20.")
+        if "stop" not in self.device_info.services:
+            raise NotImplementedError("stop is not available for the given wallbox.")
 
         cmd = "stop"
         if rfid is not None:
@@ -398,14 +500,18 @@ class Wallbox(ABC):
                 raise ValueError("RFID tag must be a 8 byte hex string.")
             cmd = f"stop {rfid}"
 
-        await self._send(cmd, fast_polling=True)
+        await self._send(cmd, fast_polling=True, blocking_time_s=1)
 
     async def display(
-        self, text: str, mintime: int | float = 2, maxtime: int | float = 10, **kwargs
+        self,
+        text: str,
+        mintime: int | float = 2,
+        maxtime: int | float = 10,
+        **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Show a text on the display."""
-        if "P30" not in self.device_info.model:
-            raise NotImplementedError("display is only available on the Keba P30.")
+        if "display" not in self.device_info.services:
+            raise NotImplementedError("display is not available for the given wallbox.")
 
         if not isinstance(mintime, (int, float)) or not isinstance(
             maxtime, (int, float)
@@ -422,7 +528,7 @@ class Wallbox(ABC):
             f"display 1 {int(round(mintime))} {int(round(maxtime))} 0 {text[0:23]}"
         )
 
-    async def unlock_socket(self, **kwargs) -> None:
+    async def unlock_socket(self, **kwargs) -> None:  # pylint: disable=unused-argument
         """Unlock the socket.
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
         """
@@ -432,12 +538,16 @@ class Wallbox(ABC):
         self,
         power: int | float,
         round_up: bool = False,
-        stop_below_6_A: bool = True,
+        stop_below_6_A: bool = True,  # pylint: disable=invalid-name
         **kwargs,
     ) -> bool:
         """Set charging power in kW.
         For this command you have to authorize a charging process first. Afterwards the charging power in kW can be adjusted. The given power is the maximum power, current values are rounded down by default to not overshoot this power value.
         """
+        if not self.device_info.is_meter_integrated():
+            raise NotImplementedError(
+                "set_charging_power only available in wallboxes with integrated meter."
+            )
 
         if not isinstance(power, (int, float)):
             raise ValueError("Power must be int or float.")
@@ -462,7 +572,7 @@ class Wallbox(ABC):
                 await asyncio.wait_for(self._charging_started_event.wait(), timeout=10)
             except asyncio.TimeoutError:
                 _LOGGER.warning(
-                    f"Charging process could not be started after 10 seconds. Abort."
+                    "Charging process could not be started after 10 seconds. Abort."
                 )
                 return False
 
@@ -474,13 +584,19 @@ class Wallbox(ABC):
             p2 = self.get_value("I2") * self.get_value("U2")
             p3 = self.get_value("I3") * self.get_value("U3")
             _LOGGER.debug(
-                f"set_charging_power phase 1 measurements: {p1}, {self.get_value('I1')}, {self.get_value('U1')}"
-            )
-            _LOGGER.debug(
-                f"set_charging_power phase 2 measurements: {p2}, {self.get_value('I2')}, {self.get_value('U2')}"
-            )
-            _LOGGER.debug(
-                f"set_charging_power phase 3 measurements: {p3}, {self.get_value('I3')}, {self.get_value('U3')}"
+                "set_charging_power measurements:\n"
+                + "phase 1: %d, %d, %d \n"
+                + "phase 2: %d, %d, %d \n"
+                + "phase 3: %d, %d, %d",
+                p1,
+                self.get_value("I1"),
+                self.get_value("U1"),
+                p2,
+                self.get_value("I2"),
+                self.get_value("U2"),
+                p3,
+                self.get_value("I3"),
+                self.get_value("U3"),
             )
 
             MINIMUM_POWER = 2
@@ -501,9 +617,11 @@ class Wallbox(ABC):
             avg_voltage = avg_voltage / number_of_phases
 
             _LOGGER.debug(
-                f"set_charging_power number of phases: {number_of_phases} with average voltage of {avg_voltage}"
+                "set_charging_power number of phases: %d with average voltage of %d",
+                number_of_phases,
+                avg_voltage,
             )
-        except:
+        except ValueError:
             _LOGGER.error(
                 "Unable to identify number of charging phases. Probably no measurement values received yet."
             )
@@ -536,10 +654,10 @@ class Wallbox(ABC):
                     await self.set_current(current=current)
                 else:
                     _LOGGER.error(
-                        f"Calculated current is much too high, something wrong"
+                        "Calculated current is much too high, something wrong"
                     )
                     return False
-        except ValueError as e:
-            _LOGGER.error(f"Could not set calculated current {e}")
+        except ValueError:
+            _LOGGER.error("Could not set calculated current.")
 
         return True

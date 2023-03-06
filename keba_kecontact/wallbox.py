@@ -397,6 +397,27 @@ class Wallbox(ABC):
                 f"ena {1 if ena else 0}", fast_polling=True, blocking_time_s=2
             )
 
+    async def set_current_max_permanent(
+        self,
+        current: int | float,
+        **kwargs,  # pylint: disable=unused-argument
+    ) -> None:  # pylint: disable=unused-argument
+        """Send command to set current limit on KEBA charging station.
+        This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
+        """
+        if (
+            not isinstance(current, (int, float))
+            or (current < 6 and current != 0)
+            or current > 63
+        ):
+            raise ValueError(
+                "Current must be int or float and value must be above 6 and below 63 A."
+            )
+
+        current_mA = int(round(current)) * 1000  # pylint: disable=invalid-name
+        cmd = f"curr {current_mA}"
+        await self._send(cmd, fast_polling=True)
+
     async def set_current(
         self,
         current: int | float,
@@ -406,6 +427,11 @@ class Wallbox(ABC):
         """Send command to set current limit on KEBA charging station.
         This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
         """
+        if "P20" in self.device_info.model:
+            _LOGGER.warning(
+                "Keba P20 does not support currtime, using curr instead. Delays are neglected"
+            )
+            await self.set_current_max_permanent(current)
         if (
             not isinstance(current, (int, float))
             or (current < 6 and current != 0)
@@ -421,14 +447,8 @@ class Wallbox(ABC):
             )
 
         current_mA = int(round(current)) * 1000  # pylint: disable=invalid-name
-        if "P20" in self.device_info.model:
-            cmd = f"curr {current_mA}"
-            await self._send(cmd, fast_polling=True)
-        else:
-            cmd = (
-                f"currtime {current_mA} {delay}" if delay > 0 else f"curr {current_mA}"
-            )
-            await self._send(cmd, fast_polling=True)
+        cmd = f"currtime {current_mA} {delay}"
+        await self._send(cmd, fast_polling=True)
 
     async def set_energy(
         self, energy: int | float = 0, **kwargs  # pylint: disable=unused-argument

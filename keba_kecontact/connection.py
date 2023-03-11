@@ -116,6 +116,10 @@ class KebaKeContact(metaclass=SingletonMeta):
         Args:
             bind_ip (str): IP address to bind the socket to
         """
+        # Skip if already initialized
+        if self._stream is not None:
+            return
+
         # Block sending until stream is setup
         async with self._sending_lock:
             self._stream = await asyncio_dgram.bind((bind_ip, UDP_PORT))
@@ -377,3 +381,14 @@ async def create_keba_connection(
     keba_connection = KebaKeContact(loop, timeout)
     await keba_connection.init_socket(bind_ip)
     return keba_connection
+
+
+async def main():
+    await create_keba_connection()
+    await create_keba_connection()
+
+
+if __name__ == "__main__":
+    asyncio_loop = asyncio.get_event_loop()
+    asyncio_loop.create_task(main())
+    asyncio_loop.run_forever()

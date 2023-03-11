@@ -14,7 +14,7 @@ from keba_kecontact.const import FIRMWARE, ID, PRODUCT, SERIAL, UNKNOWN
 _LOGGER = logging.getLogger(__name__)
 
 
-class KebaServices(Enum):
+class KebaService(Enum):
     """Enum to represent implemented services to be used with a Keba charging station"""
 
     SET_FAILSAFE = "set_failsafe"
@@ -37,10 +37,10 @@ class ChargingStationInfo:
         self.host: str = host
 
         # Features
-        self.services: list(KebaServices) = [
-            KebaServices.SET_FAILSAFE,
-            KebaServices.SET_CURRENT,
-            KebaServices.SET_CHARIGNG_POWER,
+        self.services: list(KebaService) = [
+            KebaService.SET_FAILSAFE,
+            KebaService.SET_CURRENT,
+            KebaService.SET_CHARIGNG_POWER,
         ]
         self.meter_integrated = False
         self.data_logger_integrated = False
@@ -59,7 +59,7 @@ class ChargingStationInfo:
             # Friendly name mapping
             if "KC" in product:
                 self.manufacturer = "KEBA"
-                self.services.append(KebaServices.SET_OUTPUT)
+                self.services.append(KebaService.SET_OUTPUT)
 
                 if "KC-P30-EC220112-000-DE" in product:
                     self.model = "P30-DE"
@@ -69,10 +69,10 @@ class ChargingStationInfo:
                     self.model = "P30"
 
                     # Add available services
-                    self.services.append(KebaServices.DISPLAY)
-                    self.services.append(KebaServices.SET_ENERGY)
-                    self.services.append(KebaServices.START)
-                    self.services.append(KebaServices.STOP)
+                    self.services.append(KebaService.DISPLAY)
+                    self.services.append(KebaService.SET_ENERGY)
+                    self.services.append(KebaService.START)
+                    self.services.append(KebaService.STOP)
 
                     self.meter_integrated = True
                     self.data_logger_integrated = True
@@ -90,9 +90,9 @@ class ChargingStationInfo:
                     self.model = "Wallbox Plus"
 
                 # Add available services
-                self.services.append(KebaServices.SET_ENERGY)
-                self.services.append(KebaServices.START)
-                self.services.append(KebaServices.STOP)
+                self.services.append(KebaService.SET_ENERGY)
+                self.services.append(KebaService.START)
+                self.services.append(KebaService.STOP)
 
                 self.meter_integrated = True
                 self.data_logger_integrated = True
@@ -137,7 +137,7 @@ class ChargingStationInfo:
         Returns:
             bool: True if a display is integrated, False otherwise
         """
-        return KebaServices.DISPLAY in self.services
+        return KebaService.DISPLAY in self.services
 
     def __str__(self) -> str:
         return f"{self.manufacturer} {self.model} ({self.device_id} - {self.sw_version}) at {self.host}"

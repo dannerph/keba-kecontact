@@ -4,11 +4,11 @@ import asyncio
 import json
 import logging
 import socket
-
-import asyncio_dgram
+import threading
+from enum import Enum
 from typing import Any
 
-from enum import Enum
+import asyncio_dgram
 
 from keba_kecontact.chargingstation import ChargingStation, ChargingStationInfo
 from keba_kecontact.const import ID
@@ -73,17 +73,19 @@ def get_response_type(payload: str) -> KebaResponse:
 class SingletonMeta(type):
     """Singleton base class"""
 
-    _instances = {}
+    _instance = None
+    _lock = threading.Lock()
 
     def __call__(cls, *args, **kwargs):
         """
         Possible changes to the value of the `__init__` argument do not affect
         the returned instance.
         """
-        if cls not in cls._instances:
-            instance = super().__call__(*args, **kwargs)
-            cls._instances[cls] = instance
-        return cls._instances[cls]
+        if cls._instance is None:
+            with cls._lock:
+                if not cls._instance:
+                    cls._instance = super().__call__(*args, **kwargs)
+        return cls._instance
 
 
 class KebaKeContact(metaclass=SingletonMeta):
@@ -116,12 +118,13 @@ class KebaKeContact(metaclass=SingletonMeta):
         Args:
             bind_ip (str): IP address to bind the socket to
         """
-        # Skip if already initialized
-        if self._stream is not None:
-            return
 
         # Block sending until stream is setup
         async with self._sending_lock:
+            if self._stream is not None:
+                # Skip if already initialized
+                return
+
             self._stream = await asyncio_dgram.bind((bind_ip, UDP_PORT))
 
             # Enable broadcast for discovery
@@ -180,7 +183,7 @@ class KebaKeContact(metaclass=SingletonMeta):
             charging_station = self._charging_stations.get(host)
             self._loop.create_task(charging_station.datagram_received(data))
 
-    async def _get_device_info(self, host: str) -> ChargingStationInfo:
+    async def get_device_info(self, host: str) -> ChargingStationInfo:
         """Method to get device info for a charging station with given host
 
         Args:
@@ -268,7 +271,7 @@ class KebaKeContact(metaclass=SingletonMeta):
             return self._charging_stations.get(host)
 
         # Get device info
-        device_info_new: ChargingStationInfo = await self._get_device_info(host)
+        device_info_new: ChargingStationInfo = await self.get_device_info(host)
 
         # Check if charging station with same id (serial number) already exists
         for charging_station in self.get_charging_stations():
@@ -381,14 +384,3 @@ async def create_keba_connection(
     keba_connection = KebaKeContact(loop, timeout)
     await keba_connection.init_socket(bind_ip)
     return keba_connection
-
-
-async def main():
-    await create_keba_connection()
-    await create_keba_connection()
-
-
-if __name__ == "__main__":
-    asyncio_loop = asyncio.get_event_loop()
-    asyncio_loop.create_task(main())
-    asyncio_loop.run_forever()

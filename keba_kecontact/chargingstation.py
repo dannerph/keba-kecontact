@@ -487,7 +487,7 @@ class ChargingStation:
         """Send command to set energy limit on KEBA charging station.
         This function sets the energy limit in kWh. For deactivation energy should be 0.
         """
-        if "set_energy" not in self.device_info.services:
+        if KebaService.SET_ENERGY not in self.device_info.services:
             raise NotImplementedError(
                 "set_energy is not available for the given charging station."
             )
@@ -507,7 +507,7 @@ class ChargingStation:
         self, out: int, **kwargs  # pylint: disable=unused-argument
     ) -> None:
         """Start a charging process."""
-        if "set_output" not in self.device_info.services:
+        if KebaService.SET_OUTPUT not in self.device_info.services:
             raise NotImplementedError(
                 "set_output is not available for the given charging station."
             )
@@ -524,7 +524,7 @@ class ChargingStation:
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Authorize a charging process with given RFID tag. Default rfid calss is color white"""
-        if "start" not in self.device_info.services:
+        if KebaService.START not in self.device_info.services:
             raise NotImplementedError(
                 "start is not available for the given charging station."
             )
@@ -544,7 +544,7 @@ class ChargingStation:
         self, rfid: str = None, **kwargs  # pylint: disable=unused-argument
     ) -> None:
         """De-authorize a charging process with given RFID tag."""
-        if "stop" not in self.device_info.services:
+        if KebaService.STOP not in self.device_info.services:
             raise NotImplementedError(
                 "stop is not available for the given charging station."
             )
@@ -565,7 +565,7 @@ class ChargingStation:
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Show a text on the display."""
-        if "display" not in self.device_info.services:
+        if KebaService.DISPLAY not in self.device_info.services:
             raise NotImplementedError(
                 "display is not available for the given charging station."
             )

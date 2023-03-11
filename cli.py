@@ -8,7 +8,7 @@ import sys
 
 import netifaces
 
-from keba_kecontact.connection import create_keba_connection, SetupError
+from keba_kecontact.connection import SetupError, create_keba_connection
 from keba_kecontact.emulator import Emulator
 
 logging.basicConfig(

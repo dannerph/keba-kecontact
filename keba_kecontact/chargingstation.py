@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""Implementation of a Keba charging station"""
 
 import asyncio
 import datetime
@@ -6,51 +6,60 @@ import json
 import logging
 import math
 import string
-from abc import ABC
+from enum import Enum
 from typing import Any
+
+from keba_kecontact.const import FIRMWARE, ID, PRODUCT, SERIAL, UNKNOWN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class WallboxDeviceInfo(ABC):
-    """This class represents a Keba Wallbox Device information object. It is used to identify
-    features and available services
+class KebaServices(Enum):
+    """Enum to represent implemented services to be used with a Keba charging station"""
 
-    Args:
-        ABC (_type_): _description_
+    SET_FAILSAFE = "set_failsafe"
+    SET_CURRENT = "set_current"
+    SET_CHARIGNG_POWER = "set_charging_power"
+    SET_ENERGY = "set_energy"
+    SET_OUTPUT = "set_output"
+    DISPLAY = "display"
+    START = "start"
+    STOP = "stop"
+
+
+class ChargingStationInfo:
+    """This class represents a Keba charging station information object. It is used to identify
+    features and available services
     """
 
-    def __init__(self, host, report_1_json) -> None:
-        self.webconfigurl = f"http://{host}"
-        self.host = host
+    def __init__(self, host: str, report_1_json) -> None:
+        self.webconfigurl: str = f"http://{host}"
+        self.host: str = host
 
         # Features
-        self.services = [
-            "set_failsafe",
-            "set_current",
-            "set_charging_power",
+        self.services: list(KebaServices) = [
+            KebaServices.SET_FAILSAFE,
+            KebaServices.SET_CURRENT,
+            KebaServices.SET_CHARIGNG_POWER,
         ]
         self.meter_integrated = False
         self.data_logger_integrated = False
 
-        if report_1_json["ID"] != "1":
+        if report_1_json[ID] != "1":
             _LOGGER.warning(
-                "Device info extraction for new wallbox not possible. Got wrong report response."
+                "Device info extraction for new charging station not possible. Got wrong report response."
             )
-            return None
+            return
         try:
-            self.device_id = report_1_json["Serial"]
-            self.sw_version = report_1_json["Firmware"]
+            self.device_id: str = report_1_json[SERIAL]
+            self.sw_version: str = report_1_json[FIRMWARE]
 
-            self.manufacturer = "Unknown"
-
-            product = report_1_json["Product"]
-            self.model = product.split("-")[1:]
+            product: str = report_1_json[PRODUCT]
 
             # Friendly name mapping
             if "KC" in product:
                 self.manufacturer = "KEBA"
-                self.services.append("set_output")
+                self.services.append(KebaServices.SET_OUTPUT)
 
                 if "KC-P30-EC220112-000-DE" in product:
                     self.model = "P30-DE"
@@ -60,10 +69,10 @@ class WallboxDeviceInfo(ABC):
                     self.model = "P30"
 
                     # Add available services
-                    self.services.append("display")
-                    self.services.append("set_energy")
-                    self.services.append("start")
-                    self.services.append("stop")
+                    self.services.append(KebaServices.DISPLAY)
+                    self.services.append(KebaServices.SET_ENERGY)
+                    self.services.append(KebaServices.START)
+                    self.services.append(KebaServices.STOP)
 
                     self.meter_integrated = True
                     self.data_logger_integrated = True
@@ -72,6 +81,7 @@ class WallboxDeviceInfo(ABC):
                     self.model = "P20"
                     self.meter_integrated = False
                     self.data_logger_integrated = False
+
             elif "BMW" in product:
                 self.manufacturer = "BMW"
                 if "BMW-10-EC2405B2-E1R" in product:
@@ -80,16 +90,22 @@ class WallboxDeviceInfo(ABC):
                     self.model = "Wallbox Plus"
 
                 # Add available services
-                self.services.append("set_energy")
-                self.services.append("start")
-                self.services.append("stop")
+                self.services.append(KebaServices.SET_ENERGY)
+                self.services.append(KebaServices.START)
+                self.services.append(KebaServices.STOP)
 
                 self.meter_integrated = True
                 self.data_logger_integrated = True
+            else:
+                _LOGGER.warning(
+                    "Not able to identify the model type. Please report to https://github.com/dannerph/keba-kecontact/issues"
+                )
+                self.manufacturer: str = UNKNOWN
+                self.model = product.split("-")[1:]
 
         except KeyError:
             _LOGGER.warning("Could not extract report 1 data for KEBA charging station")
-            return None
+            return
 
     def available_services(self) -> list[str]:
         """Get available services as a list of method name strings
@@ -100,20 +116,40 @@ class WallboxDeviceInfo(ABC):
         return self.services
 
     def is_meter_integrated(self) -> bool:
+        """Method to check if a metering device is integrated into the charging station
+
+        Returns:
+            bool: True if metering is integrated, False otherwise
+        """
         return self.meter_integrated
 
     def is_data_logger_integrated(self) -> bool:
+        """Method to check if logging funcitonionality is integrated into the charging staiton
+
+        Returns:
+            bool: True if report 1XX is available, False otherwise
+        """
         return self.data_logger_integrated
 
+    def has_display(self) -> bool:
+        """Method to check if a display is integrated into the charging staiton
+
+        Returns:
+            bool: True if a display is integrated, False otherwise
+        """
+        return KebaServices.DISPLAY in self.services
+
     def __str__(self) -> str:
-        return f"manufacturer: {self.manufacturer}\nmodel: {self.model}\ndevice_id (serial number): {self.device_id}\nfirmware version: {self.sw_version}\nhost: {self.host}"
+        return f"{self.manufacturer} {self.model} ({self.device_id} - {self.sw_version}) at {self.host}"
 
 
-class Wallbox(ABC):
+class ChargingStation:
+    """This class represents a KEBA charging station (charging station)"""
+
     def __init__(
         self,
         keba,
-        device_info: WallboxDeviceInfo,
+        device_info: ChargingStationInfo,
         loop=None,
         periodic_request: bool = True,
         refresh_interval_s: int = 5,
@@ -148,11 +184,11 @@ class Wallbox(ABC):
 
         self._charging_started_event: asyncio.Event = asyncio.Event()
 
-    def update_device_info(self, device_info: WallboxDeviceInfo) -> None:
-        """Updates the device info in the wallbox object
+    def update_device_info(self, device_info: ChargingStationInfo) -> None:
+        """Updates the device info in the charging station object
 
         Args:
-            device_info (WallboxDeviceInfo): new device info
+            device_info (ChargingStationInfo): new device info
         """
         # Stop periodic requests
         self.stop_periodic_request()
@@ -169,39 +205,25 @@ class Wallbox(ABC):
         if self._polling_task is not None:
             self._polling_task.cancel()
             _LOGGER.debug(
-                "Periodic requests for Wallbox %s at %s stopped.",
+                "Periodic requests for charging station %s at %s stopped.",
                 self.device_info.model,
                 self.device_info.host,
             )
 
-    def add_callback(self, callback) -> None:
-        """Add callback function to be called after new data is received."""
-        self._callbacks.append(callback)
-
-    def get_value(self, key: str) -> Any:
-        """Get value. If key is None, all data is return, otherwise the respective value or if
-        non-existing key none is returned."""
-        if key is None:
-            return self.data
-        try:
-            return self.data[key]
-        except KeyError:
-            return None
-
     async def datagram_received(self, data) -> None:
         """Handle received datagram."""
-        _LOGGER.debug("Datagram received, starting to process.")
-        decoded_data = data.decode()
+        _LOGGER.info("%s datagram received", self.device_info)
+        _LOGGER.debug("Data: %s", data.rstrip())
 
-        if "TCH-OK :done" in decoded_data:
-            _LOGGER.debug("Last command accepted: %s", decoded_data.rstrip())
+        if "TCH-OK :done" in data:
+            _LOGGER.debug("Last command accepted: %s", data.rstrip())
             return
 
-        if "TCH-ERR" in decoded_data:
-            _LOGGER.warning("Last command rejected: %s", decoded_data.rstrip())
+        if "TCH-ERR" in data:
+            _LOGGER.warning("Last command rejected: %s", data.rstrip())
             return
 
-        json_rcv = json.loads(data.decode())
+        json_rcv = json.loads(data)
 
         # Try to edit json to more human-friendly formats
         if "Sec" in json_rcv:
@@ -235,7 +257,7 @@ class Wallbox(ABC):
         # Extract plug state
         if "Plug" in json_rcv:
             plug_state = int(json_rcv["Plug"])
-            json_rcv["Plug_wallbox"] = plug_state > 0
+            json_rcv["Plug_charging_station"] = plug_state > 0
             json_rcv["Plug_locked"] = plug_state == 3 | plug_state == 7
             json_rcv["Plug_EV"] = plug_state > 4
 
@@ -271,11 +293,7 @@ class Wallbox(ABC):
         for callback in self._callbacks:
             callback(self, self.data)
 
-        if (
-            int(self.get_value("State")) == 3
-            and "ID" in json_rcv
-            and "3" in json_rcv["ID"]
-        ):
+        if int(self.get_value("State")) == 3 and ID in json_rcv and "3" in json_rcv[ID]:
             self._charging_started_event.set()
 
         _LOGGER.debug("Executed %d callbacks", len(self._callbacks))
@@ -310,7 +328,7 @@ class Wallbox(ABC):
             self._fast_polling_count += 1
             sleep = self._refresh_interval_fast_polling
 
-        _LOGGER.debug("Periodic data request executed, now wait for %s seconds", sleep)
+        _LOGGER.info("Periodic data request executed, now wait for %s seconds", sleep)
         await asyncio.sleep(sleep)
 
         self._polling_task = self._loop.create_task(self._periodic_request())
@@ -319,6 +337,19 @@ class Wallbox(ABC):
     ####################################################
     #                   Functions                      #
     ####################################################
+    def add_callback(self, callback) -> None:
+        """Add callback function to be called after new data is received."""
+        self._callbacks.append(callback)
+
+    def get_value(self, key: str) -> Any:
+        """Get value. If key is None, all data is return, otherwise the respective value or if
+        non-existing key none is returned."""
+        if key is None:
+            return self.data
+        try:
+            return self.data[key]
+        except KeyError:
+            return None
 
     async def request_data(
         self,
@@ -458,7 +489,7 @@ class Wallbox(ABC):
         """
         if "set_energy" not in self.device_info.services:
             raise NotImplementedError(
-                "set_energy is not available for the given wallbox."
+                "set_energy is not available for the given charging station."
             )
 
         if (
@@ -478,7 +509,7 @@ class Wallbox(ABC):
         """Start a charging process."""
         if "set_output" not in self.device_info.services:
             raise NotImplementedError(
-                "set_output is not available for the given wallbox."
+                "set_output is not available for the given charging station."
             )
 
         if not isinstance(out, int) or out < 0 or (out > 1 and out < 10) or out > 150:
@@ -494,7 +525,9 @@ class Wallbox(ABC):
     ) -> None:
         """Authorize a charging process with given RFID tag. Default rfid calss is color white"""
         if "start" not in self.device_info.services:
-            raise NotImplementedError("start is not available for the given wallbox.")
+            raise NotImplementedError(
+                "start is not available for the given charging station."
+            )
 
         cmd = "start"
         if rfid is not None:
@@ -512,7 +545,9 @@ class Wallbox(ABC):
     ) -> None:
         """De-authorize a charging process with given RFID tag."""
         if "stop" not in self.device_info.services:
-            raise NotImplementedError("stop is not available for the given wallbox.")
+            raise NotImplementedError(
+                "stop is not available for the given charging station."
+            )
 
         cmd = "stop"
         if rfid is not None:
@@ -531,7 +566,9 @@ class Wallbox(ABC):
     ) -> None:
         """Show a text on the display."""
         if "display" not in self.device_info.services:
-            raise NotImplementedError("display is not available for the given wallbox.")
+            raise NotImplementedError(
+                "display is not available for the given charging station."
+            )
 
         if not isinstance(mintime, (int, float)) or not isinstance(
             maxtime, (int, float)
@@ -566,7 +603,7 @@ class Wallbox(ABC):
         """
         if not self.device_info.is_meter_integrated():
             raise NotImplementedError(
-                "set_charging_power only available in wallboxes with integrated meter."
+                "set_charging_power only available in charging stations with integrated meter."
             )
 
         if not isinstance(power, (int, float)):

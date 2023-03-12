@@ -452,7 +452,7 @@ class ChargingStation:
     async def set_current(
         self,
         current: int | float,
-        delay: int = 0,
+        delay: int = 1,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:  # pylint: disable=unused-argument
         """Send command to set current limit on KEBA charging station.
@@ -696,19 +696,16 @@ class ChargingStation:
                 await self.set_ena(False)  # disable if charging power is 0 kW
             else:
                 # Enable if disabled
-                if (
-                    self.get_value("Enable sys") == 0
-                    or self.get_value("Enable user") == 0
-                ):
+                if self.get_value("Enable user") == 0:
                     await self.set_ena(True)
 
                 if current < 6.0:
                     if stop_below_6_A:
                         await self.set_ena(False)
                     else:
-                        await self.set_current(current=6)
+                        await self.set_current(current=6, delay=1)
                 elif current < 63:
-                    await self.set_current(current=current)
+                    await self.set_current(current=current, delay=1)
                 else:
                     _LOGGER.error(
                         "Calculated current is much too high, something wrong"

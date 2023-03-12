@@ -49,6 +49,8 @@ async def client_mode(ips: list[str]):
         charging_station.add_callback(callback1)  # Optional
         charging_station.add_callback(callback2)  # Optional
         print(charging_station.device_info)
+        await charging_station.set_current_max_permanent(63)
+        await charging_station.set_current(12, 1)
 
 
 async def emulation_mode():

@@ -445,7 +445,7 @@ class ChargingStation:
                 "Current must be int or float and value must be above 6 and below 63 A."
             )
 
-        current_mA = int(round(current)) * 1000  # pylint: disable=invalid-name
+        current_mA = int(round(current * 1000))  # pylint: disable=invalid-name
         cmd = f"curr {current_mA}"
         await self._send(cmd, fast_polling=True)
 
@@ -477,7 +477,7 @@ class ChargingStation:
                 "Delay must be int and value must be between 0 and 860400 seconds."
             )
 
-        current_mA = int(round(current)) * 1000  # pylint: disable=invalid-name
+        current_mA = int(round(current * 1000))  # pylint: disable=invalid-name
         cmd = f"currtime {current_mA} {delay}"
         await self._send(cmd, fast_polling=True)
 

@@ -77,6 +77,11 @@ class ChargingStationInfo:
                     self.meter_integrated = True
                     self.data_logger_integrated = True
 
+                elif "KC-P20-EC240130-000" in product:
+                    self.model = "P20"
+                    self.meter_integrated = True
+                    self.data_logger_integrated = False
+                    
                 elif "P20" in product:
                     self.model = "P20"
                     self.meter_integrated = False

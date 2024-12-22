@@ -28,6 +28,7 @@ class ChargingStationInfo:
             KebaService.SET_CHARGING_POWER,
         ]
         self.meter_integrated = False
+        self.authorization_integrated = False
         self.data_logger_integrated = False
 
         # Check if report is of expected structure
@@ -43,52 +44,63 @@ class ChargingStationInfo:
 
         # Friendly name mapping
         product: str = report_1[ReportField.PRODUCT]
-        if "KC" in product:
+        self.manufacturer = product.split("-")[0]  # "KC" or "BMW"
+        self.model = product.split("-")[1]  # "P20", "P30" or custom for none Keba branding
+        product_version = product.split("-")[2]  # e.g. "ES230001" or "EC220110"
+        product_features = product.split("-")[3]  # e.g. "00R" for RFID (P20)
+        if self.manufacturer == "KC":
             self.manufacturer = "KEBA"
-            self.services.append(KebaService.SET_OUTPUT)
+            self.services.append(KebaService.SET_OUTPUT)  # not sure if available for all?
 
-            if "KC-P30-EC220112-000-DE" in product:
-                self.model = "P30-DE"
-                self.meter_integrated = False
+            if self.model == "P30":
+                self.authorization_integrated = True
                 self.data_logger_integrated = True
-            elif "P30" in product:
-                self.model = "P30"
+                if "KC-P30-EC220112-000-DE" in product:  # Special case DE-Wallbox
+                    self.model = "P30-DE"
+                    self.meter_integrated = False
+                else:
+                    self.services.append(KebaService.DISPLAY)
+                    self.meter_integrated = True
 
-                # Add available services
-                self.services.append(KebaService.DISPLAY)
-                self.services.append(KebaService.SET_ENERGY)
-                self.services.append(KebaService.START)
-                self.services.append(KebaService.STOP)
+            if self.model == "P20":
+                # https://media.expleo.hu/documents/katalogusok/keba/kecontact_smart-charging-solutions_en_interactive.pdf
+                if product_version.endswith("01"):  # e-series
+                    self.meter_integrated = False
+                    self.data_logger_integrated = False
+                elif product_version.endswith("10"):  # b-series
+                    self.meter_integrated = True
+                    self.data_logger_integrated = False
+                elif product_version.endswith("20") or product_version.endswith("30"):  # c-series
+                    self.meter_integrated = True
+                    self.data_logger_integrated = False  # not sure about this one
 
-                self.meter_integrated = True
-                self.data_logger_integrated = True
+                if "R" in product_features:  # not sure maybe "K" might also work
+                    self.authorization_integrated = True
 
-            elif "P20" in product:
-                self.model = "P20"
-                self.meter_integrated = False
-                self.data_logger_integrated = False
-
-        elif "BMW" in product:
+        elif self.manufacturer == "BMW":
             self.manufacturer = "BMW"
+            # Absolutely no idea, how the models are identified. The following is based on examples
+            # available during development
             if "BMW-10-EC2405B2-E1R" in product:
                 self.model = "Wallbox Connect"
-            elif "BMW-10-EC240522-E1R" in product:
+            elif "BMW-10-EC240522-E1R" in product or "BMW-10-ESS40022-E1R" in product:
                 self.model = "Wallbox Plus"
 
-            # Add available services
-            self.services.append(KebaService.SET_ENERGY)
-            self.services.append(KebaService.START)
-            self.services.append(KebaService.STOP)
-
+            # Features
             self.meter_integrated = True
+            self.authorization_integrated = True
             self.data_logger_integrated = True
         else:
             _LOGGER.warning(
                 "Not able to identify the model type. Please report to"
                 + "https://github.com/dannerph/keba-kecontact/issues"
             )
-            self.manufacturer: str = "unknown"
-            self.model = product.split("-")[1:]
+
+        if self.meter_integrated:
+            self.services.append(KebaService.SET_ENERGY)
+        if self.authorization_integrated:
+            self.services.append(KebaService.START)
+            self.services.append(KebaService.STOP)
 
     def __str__(self) -> str:
         """Print device info."""

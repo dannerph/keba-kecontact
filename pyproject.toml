@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "keba_kecontact"
+version = "3.0.3"
+authors = [{ name = "Philipp Danner", email = "philipp@danner-web.de" }]
+description = "A python library to communicate with the KEBA charging stations via udp"
+license = { file = "LICENSE.txt" }
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["asyncio_dgram>=2.1.1", "netifaces>=0.11.0"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["keba_kecontact*"]
+
+[tool.ruff]
+fix = true
+line-length = 100
+
+[tool.ruff.lint]
+select = ["I", "E", "F", "D", "UP", "W", "N", "I", "ANN", "RUF", "PL"]
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 100
+skip-magic-trailing-comma = true

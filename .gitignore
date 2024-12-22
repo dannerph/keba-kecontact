@@ -1,8 +1,10 @@
-.idea/*
-.vscode/*
-build/
-dist/
-keba_kecontact.egg-info/
-venv/
-
+.venv
+.mypy_cache
+*.pyc
 __pycache__
+.vscode
+cache/*
+.pytest_cache/
+.mypy_cache/
+build
+*.egg-info

@@ -3,10 +3,11 @@
 
 import argparse
 import asyncio
+import ipaddress
 import logging
 import sys
 
-import netifaces
+from ifaddr import get_adapters
 
 from keba_kecontact.chargingstation import ChargingStation
 from keba_kecontact.connection import SetupError, create_keba_connection
@@ -60,13 +61,11 @@ async def discovery_mode() -> None:
     """Start a discovery on all available network interfaces."""
     keba = await create_keba_connection()
 
-    for interface in netifaces.interfaces():
-        data = netifaces.ifaddresses(interface)
-        ipv4 = data.get(2)
-        if ipv4 is not None:
-            broadcast_addr = ipv4[0].get("broadcast")
-            if broadcast_addr is not None:
-                devices = await keba.discover_devices(broadcast_addr=broadcast_addr)
+    for adapter in get_adapters():
+        for ip in adapter.ips:
+            if ip.is_IPv4:
+                network = ipaddress.ip_network(ip.ip + "/" + str(ip.network_prefix), strict=False)
+                devices = await keba.discover_devices(broadcast_addr=str(network.broadcast_address))
                 for host in devices:
                     await keba.setup_charging_station(host)
 

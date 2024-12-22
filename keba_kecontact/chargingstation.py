@@ -1,4 +1,4 @@
-"""Implementation of a Keba charging station"""
+"""Implementation of a Keba charging station."""
 
 import asyncio
 import datetime
@@ -15,11 +15,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class KebaService(Enum):
-    """Enum to represent implemented services to be used with a Keba charging station"""
+    """Enum to represent implemented services to be used with a Keba charging station."""
 
     SET_FAILSAFE = "set_failsafe"
     SET_CURRENT = "set_current"
-    SET_CHARIGNG_POWER = "set_charging_power"
+    SET_CHARGING_POWER = "set_charging_power"
     SET_ENERGY = "set_energy"
     SET_OUTPUT = "set_output"
     DISPLAY = "display"
@@ -28,27 +28,30 @@ class KebaService(Enum):
 
 
 class ChargingStationInfo:
-    """This class represents a Keba charging station information object. It is used to identify
-    features and available services
-    """
+    """Keba charging station information object to identify features and available services."""
 
-    def __init__(self, host: str, report_1_json) -> None:
+    def __init__(self, host: str, report_1_json: dict[str, str]) -> None:
+        """Initialize charging station info.
+
+        Args:
+            host (str): host address
+            report_1_json (dict[str, str]): dict of report 1 data to extract
+
+        """
         self.webconfigurl: str = f"http://{host}"
         self.host: str = host
 
         # Features
-        self.services: list(KebaService) = [
+        self.services: list[KebaService] = [
             KebaService.SET_FAILSAFE,
             KebaService.SET_CURRENT,
-            KebaService.SET_CHARIGNG_POWER,
+            KebaService.SET_CHARGING_POWER,
         ]
         self.meter_integrated = False
         self.data_logger_integrated = False
 
         if report_1_json[ID] != "1":
-            _LOGGER.warning(
-                "Device info extraction for new charging station not possible. Got wrong report response."
-            )
+            _LOGGER.warning("Device info extraction not possible: Wrong report received.")
             return
         try:
             self.device_id: str = report_1_json[SERIAL]
@@ -98,7 +101,8 @@ class ChargingStationInfo:
                 self.data_logger_integrated = True
             else:
                 _LOGGER.warning(
-                    "Not able to identify the model type. Please report to https://github.com/dannerph/keba-kecontact/issues"
+                    "Not able to identify the model type. Please report to"
+                    + "https://github.com/dannerph/keba-kecontact/issues"
                 )
                 self.manufacturer: str = UNKNOWN
                 self.model = product.split("-")[1:]
@@ -108,56 +112,61 @@ class ChargingStationInfo:
             return
 
     def available_services(self) -> list[str]:
-        """Get available services as a list of method name strings
+        """Get available services as a list of method name strings.
 
         Returns:
             list[str]: list of services
+
         """
         return self.services
 
     def is_meter_integrated(self) -> bool:
-        """Method to check if a metering device is integrated into the charging station
+        """Check if a metering device is integrated into the charging station.
 
         Returns:
             bool: True if metering is integrated, False otherwise
+
         """
         return self.meter_integrated
 
     def is_data_logger_integrated(self) -> bool:
-        """Method to check if logging funcitonionality is integrated into the charging staiton
+        """Check if logging functionality is integrated into the charging station.
 
         Returns:
             bool: True if report 1XX is available, False otherwise
+
         """
         return self.data_logger_integrated
 
     def has_display(self) -> bool:
-        """Method to check if a display is integrated into the charging staiton
+        """Check if a display is integrated into the charging station.
 
         Returns:
             bool: True if a display is integrated, False otherwise
+
         """
         return KebaService.DISPLAY in self.services
 
     def __str__(self) -> str:
-        return f"{self.manufacturer} {self.model} ({self.device_id} - {self.sw_version}) at {self.host}"
+        """Print device info."""
+        return (
+            f"{self.manufacturer} {self.model} ({self.device_id}, {self.sw_version}) at {self.host}"
+        )
 
 
 class ChargingStation:
-    """This class represents a KEBA charging station (charging station)"""
+    """KEBA charging station."""
 
     def __init__(
         self,
         keba,
         device_info: ChargingStationInfo,
-        loop=None,
+        loop: asyncio.EventLoop | None = None,
         periodic_request: bool = True,
         refresh_interval_s: int = 5,
         refresh_interval_fast_polling_s: int = 1,
     ) -> None:
         """Initialize charging station connection."""
-        # super().__init__(host, self.hass_callback)
-
         self._loop = asyncio.get_event_loop() if loop is None else loop
 
         self._keba = keba
@@ -185,10 +194,11 @@ class ChargingStation:
         self._charging_started_event: asyncio.Event = asyncio.Event()
 
     def update_device_info(self, device_info: ChargingStationInfo) -> None:
-        """Updates the device info in the charging station object
+        """Update device info in the charging station object.
 
         Args:
             device_info (ChargingStationInfo): new device info
+
         """
         # Stop periodic requests
         self.stop_periodic_request()
@@ -201,7 +211,7 @@ class ChargingStation:
             self._polling_task = self._loop.create_task(self._periodic_request())
 
     def stop_periodic_request(self) -> None:
-        """This method stops the peridodic data reqeusts."""
+        """Stop the periodic data requests."""
         if self._polling_task is not None:
             self._polling_task.cancel()
             _LOGGER.debug(
@@ -313,8 +323,7 @@ class ChargingStation:
             self._polling_task = self._loop.create_task(self._periodic_request())
 
     async def _periodic_request(self) -> None:
-        """Send  periodic update requests."""
-
+        """Send periodic update requests."""
         if not self._periodic_request_enabled:
             _LOGGER.warning(
                 "periodic request was not enabled at setup. This error should not appear."
@@ -353,7 +362,7 @@ class ChargingStation:
 
     async def request_data(
         self,
-        **kwargs,  # pylint: disable=unused-argument
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """Send request for KEBA charging station data.
 
@@ -373,7 +382,7 @@ class ChargingStation:
         timeout: int = 30,
         fallback_value: int = 6,
         persist: bool = False,
-        **kwargs,  # pylint: disable=unused-argument
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """Send command to activate failsafe mode on KEBA charging station.
         This function sets the failsafe mode. For deactivation, all parameters must be 0.
@@ -400,21 +409,20 @@ class ChargingStation:
                 fast_polling=True,
             )
         else:
-            await self._send(
-                f"failsafe 0 0 {1 if persist else 0}",
-                fast_polling=True,
-            )
+            await self._send(f"failsafe 0 0 {1 if persist else 0}", fast_polling=True)
 
-    async def enable(self, **kwargs) -> None:  # pylint: disable=unused-argument
+    async def enable(self, **kwargs) -> None:  # noqa: ANN003
         """Start a charging process."""
         await self.set_ena(True)
 
-    async def disable(self, **kwargs) -> None:  # pylint: disable=unused-argument
+    async def disable(self, **kwargs) -> None:  # noqa: ANN003
         """Stop a charging process."""
         await self.set_ena(False)
 
     async def set_ena(
-        self, ena: bool, **kwargs  # pylint: disable=unused-argument
+        self,
+        ena: bool,
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """Set ena."""
         if not isinstance(ena, bool):
@@ -424,23 +432,17 @@ class ChargingStation:
             await self._send(f"ena {1 if ena else 0}", fast_polling=True)
         else:
             # disable and block 2 seconds
-            await self._send(
-                f"ena {1 if ena else 0}", fast_polling=True, blocking_time_s=2
-            )
+            await self._send(f"ena {1 if ena else 0}", fast_polling=True, blocking_time_s=2)
 
     async def set_current_max_permanent(
         self,
         current: int | float,
-        **kwargs,  # pylint: disable=unused-argument
-    ) -> None:  # pylint: disable=unused-argument
+        **kwargs,  # noqa: ANN003
+    ) -> None:  # noqa: ANN003
         """Send command to set current limit on KEBA charging station.
         This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
         """
-        if (
-            not isinstance(current, (int, float))
-            or (current < 6 and current != 0)
-            or current > 63
-        ):
+        if not isinstance(current, (int, float)) or (current < 6 and current != 0) or current > 63:
             raise ValueError(
                 "Current must be int or float and value must be above 6 and below 63 A."
             )
@@ -453,8 +455,8 @@ class ChargingStation:
         self,
         current: int | float,
         delay: int = 1,
-        **kwargs,  # pylint: disable=unused-argument
-    ) -> None:  # pylint: disable=unused-argument
+        **kwargs,  # noqa: ANN003
+    ) -> None:  # noqa: ANN003
         """Send command to set current limit on KEBA charging station.
         This function sets the current limit in A after a given delay in seconds. 0 A stops the charging process similar to ena 0.
         """
@@ -463,40 +465,30 @@ class ChargingStation:
                 "Keba P20 does not support currtime, using curr instead. Delays are neglected"
             )
             await self.set_current_max_permanent(current)
-        if (
-            not isinstance(current, (int, float))
-            or (current < 6 and current != 0)
-            or current > 63
-        ):
+        if not isinstance(current, (int, float)) or (current < 6 and current != 0) or current > 63:
             raise ValueError(
                 "Current must be int or float and value must be above 6 and below 63 A."
             )
 
         if not isinstance(delay, int) or delay < 0 or delay >= 860400:
-            raise ValueError(
-                "Delay must be int and value must be between 0 and 860400 seconds."
-            )
+            raise ValueError("Delay must be int and value must be between 0 and 860400 seconds.")
 
         current_mA = int(round(current * 1000))  # pylint: disable=invalid-name
         cmd = f"currtime {current_mA} {delay}"
         await self._send(cmd, fast_polling=True)
 
     async def set_energy(
-        self, energy: int | float = 0, **kwargs  # pylint: disable=unused-argument
+        self,
+        energy: int | float = 0,
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """Send command to set energy limit on KEBA charging station.
         This function sets the energy limit in kWh. For deactivation energy should be 0.
         """
         if KebaService.SET_ENERGY not in self.device_info.services:
-            raise NotImplementedError(
-                "set_energy is not available for the given charging station."
-            )
+            raise NotImplementedError("set_energy is not available for the given charging station.")
 
-        if (
-            not isinstance(energy, (int, float))
-            or (energy < 1 and energy != 0)
-            or energy >= 10000
-        ):
+        if not isinstance(energy, (int, float)) or (energy < 1 and energy != 0) or energy >= 10000:
             raise ValueError(
                 "Energy must be int or float and value must be above 0.0001 kWh and below 10000 kWh."
             )
@@ -504,13 +496,13 @@ class ChargingStation:
         await self._send(f"setenergy {int(round(energy * 10000))}", fast_polling=True)
 
     async def set_output(
-        self, out: int, **kwargs  # pylint: disable=unused-argument
+        self,
+        out: int,
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """Start a charging process."""
         if KebaService.SET_OUTPUT not in self.device_info.services:
-            raise NotImplementedError(
-                "set_output is not available for the given charging station."
-            )
+            raise NotImplementedError("set_output is not available for the given charging station.")
 
         if not isinstance(out, int) or out < 0 or (out > 1 and out < 10) or out > 150:
             raise ValueError("Output parameter must be True or False.")
@@ -521,13 +513,11 @@ class ChargingStation:
         self,
         rfid: str = None,
         rfid_class: str = "01010400000000000000",
-        **kwargs,  # pylint: disable=unused-argument
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """Authorize a charging process with given RFID tag. Default rfid calss is color white"""
         if KebaService.START not in self.device_info.services:
-            raise NotImplementedError(
-                "start is not available for the given charging station."
-            )
+            raise NotImplementedError("start is not available for the given charging station.")
 
         cmd = "start"
         if rfid is not None:
@@ -541,13 +531,13 @@ class ChargingStation:
         await self._send(cmd, fast_polling=True, blocking_time_s=1)
 
     async def stop(
-        self, rfid: str = None, **kwargs  # pylint: disable=unused-argument
+        self,
+        rfid: str = None,
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """De-authorize a charging process with given RFID tag."""
         if KebaService.STOP not in self.device_info.services:
-            raise NotImplementedError(
-                "stop is not available for the given charging station."
-            )
+            raise NotImplementedError("stop is not available for the given charging station.")
 
         cmd = "stop"
         if rfid is not None:
@@ -562,17 +552,13 @@ class ChargingStation:
         text: str,
         mintime: int | float = 2,
         maxtime: int | float = 10,
-        **kwargs,  # pylint: disable=unused-argument
+        **kwargs,  # noqa: ANN003
     ) -> None:
         """Show a text on the display."""
         if KebaService.DISPLAY not in self.device_info.services:
-            raise NotImplementedError(
-                "display is not available for the given charging station."
-            )
+            raise NotImplementedError("display is not available for the given charging station.")
 
-        if not isinstance(mintime, (int, float)) or not isinstance(
-            maxtime, (int, float)
-        ):
+        if not isinstance(mintime, (int, float)) or not isinstance(maxtime, (int, float)):
             raise ValueError("Times must be int or float.")
 
         if mintime < 0 or mintime > 65535 or maxtime < 0 or maxtime > 65535:
@@ -581,11 +567,9 @@ class ChargingStation:
         # Formating
         text = text.replace(" ", "$")  # Will be translated back by the display
 
-        await self._send(
-            f"display 1 {int(round(mintime))} {int(round(maxtime))} 0 {text[0:23]}"
-        )
+        await self._send(f"display 1 {int(round(mintime))} {int(round(maxtime))} 0 {text[0:23]}")
 
-    async def unlock_socket(self, **kwargs) -> None:  # pylint: disable=unused-argument
+    async def unlock_socket(self, **kwargs) -> None:  # noqa: ANN003
         """Unlock the socket.
         For this command you have to disable the charging process first. Afterwards you can unlock the socket.
         """
@@ -628,9 +612,7 @@ class ChargingStation:
             try:
                 await asyncio.wait_for(self._charging_started_event.wait(), timeout=10)
             except asyncio.TimeoutError:
-                _LOGGER.warning(
-                    "Charging process could not be started after 10 seconds. Abort."
-                )
+                _LOGGER.warning("Charging process could not be started after 10 seconds. Abort.")
                 return False
 
         # Identify the number of phases that are used to charge and calculate average voltage of active phases
@@ -707,9 +689,7 @@ class ChargingStation:
                 elif current < 63:
                     await self.set_current(current=current, delay=1)
                 else:
-                    _LOGGER.error(
-                        "Calculated current is much too high, something wrong"
-                    )
+                    _LOGGER.error("Calculated current is much too high, something wrong")
                     return False
         except ValueError:
             _LOGGER.error("Could not set calculated current.")

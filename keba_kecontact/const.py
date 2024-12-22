@@ -1,4 +1,4 @@
-"""const strings for keba kecontact"""
+"""Consts for keba kecontact."""
 
 SERIAL = "Serial"
 FIRMWARE = "Firmware"

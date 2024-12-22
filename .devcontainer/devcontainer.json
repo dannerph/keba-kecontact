@@ -8,6 +8,7 @@
 	"features": {
         "ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}
     },
+	"appPort": ["7090/udp"],
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
 	// Use 'postCreateCommand' to run commands after the container is created.

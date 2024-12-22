@@ -1,3 +1,5 @@
+"""Charging station emulator."""
+
 import asyncio
 import json
 import logging
@@ -7,30 +9,38 @@ import asyncio_dgram
 _LOGGER = logging.getLogger(__name__)
 
 UDP_PORT = 7090
+REPORT_ID_1 = 1
+REPORT_ID_2 = 2
+REPORT_ID_3 = 3
+REPORT_ID_100 = 100
 
 
 class Emulator:
-    """Wallbox emulator for testing purposes"""
+    """Charging station emulator for testing purposes."""
 
-    def __init__(self, loop=None):
-        """Constructor."""
+    def __init__(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
+        """Initialize emulator.
+
+        Args:
+            loop (asyncio.AbstractEventLoop | None, optional): asyncio event loop. Defaults to None.
+
+        """
         self._loop = asyncio.get_event_loop() if loop is None else loop
         self._stream = None
 
-    async def start(self):
+    async def start(self) -> None:
         """Start emulator."""
-
         self._stream = await asyncio_dgram.bind(("0.0.0.0", UDP_PORT))
         self._loop.create_task(self._listen())
 
-    async def _listen(self):
+    async def _listen(self) -> None:
         data, remote_addr = await self._stream.recv()  # Listen until something received
         self._loop.create_task(self._listen())  # Listen again
         self._loop.create_task(self._internal_callback(data, remote_addr))  # Callback
 
-    async def _internal_callback(self, raw_data, remote_addr):
+    async def _internal_callback(self, raw_data: bytes, remote_addr: tuple) -> None:
         data = raw_data.decode()
-        _LOGGER.info("Datagram recvied from %s : %s", str(remote_addr), data)
+        _LOGGER.info("Datagram received from %s : %s", str(remote_addr), data)
 
         payload = ""
         matches_ok = [
@@ -51,13 +61,11 @@ class Emulator:
                 payload = "TCH-OK :done"
             elif "start" in data:
                 split = data.split(" ")
-                payload = (
-                    '"RFID tag": "' + split[1] + '"\n' + '"RFID class": "' + split[2]
-                )
+                payload = '"RFID tag": "' + split[1] + '"\n' + '"RFID class": "' + split[2]
             elif "report" in data:
                 split = data.split(" ")
                 i = int(split[1])
-                if i == 1:
+                if i == REPORT_ID_1:
                     payload = {
                         "ID": "1",
                         "Product": "KC-P30_Emulator",
@@ -66,7 +74,7 @@ class Emulator:
                         "COM-module": 0,
                         "Sec": 0,
                     }
-                elif i == 2:
+                elif i == REPORT_ID_2:
                     payload = {
                         "ID": "2",
                         "State": 2,
@@ -89,7 +97,7 @@ class Emulator:
                         "Serial": "15017355",
                         "Sec": 4294967296,
                     }
-                elif i == 3:
+                elif i == REPORT_ID_3:
                     payload = {
                         "ID": "3",
                         "U1": 230,
@@ -106,7 +114,7 @@ class Emulator:
                         "Sec": 4294967296,
                     }
 
-                elif i >= 100:
+                elif i >= REPORT_ID_100:
                     payload = {
                         "ID": str(i),
                         "Session ID": 35,

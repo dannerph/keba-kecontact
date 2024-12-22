@@ -10,10 +10,7 @@ description = "A python library to communicate with the KEBA charging stations v
 license = { file = "LICENSE.txt" }
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "asyncio_dgram>=2.2.0",
-    "ifaddr>=0.2.0",
-]
+dependencies = ["asyncio_dgram>=2.2.0", "ifaddr>=0.2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
@@ -27,6 +24,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["I", "E", "F", "D", "UP", "W", "N", "I", "ANN", "RUF", "PL"]
+ignore = ["PLR2004"]
 
 [tool.ruff.lint.pylint]
 max-args = 6

@@ -1,74 +1,20 @@
-"""Implementation of a Keba charging station"""
+"""Keba connection manager."""
 
 import asyncio
 import json
 import logging
 import socket
 import threading
-from enum import Enum
 from typing import Any
 
 import asyncio_dgram
 
-from keba_kecontact.chargingstation import ChargingStation, ChargingStationInfo
-from keba_kecontact.const import ID
+from .charging_station import ChargingStation
+from .charging_station_info import ChargingStationInfo
+from .const import UDP_PORT, KebaResponse
+from .utils import SetupError, get_response_type
 
 _LOGGER = logging.getLogger(__name__)
-
-UDP_PORT = 7090
-
-
-class KebaResponse(Enum):
-    """Enum to define different keba responses."""
-
-    BASIC_INFO = "i"
-    REPORT_1 = "report 1"
-    REPORT_2 = "report 2"
-    REPORT_3 = "report 3"
-    REPORT_1XX = "report 1xx"
-    TCH_OK = "TCH-OK"
-    TCH_ERR = "TCH-ERR"
-    PUSH_UPDATE = "push update"
-    BROADCAST = "broadcast"
-    UNKNOWN = "unknown"
-
-
-def get_response_type(payload: str) -> KebaResponse:  # noqa: PLR0911
-    """Get the response type.
-
-    Args:
-        payload (str): payload of response from Keba charging station
-
-    Returns:
-        KebaResponseType: response type of the response
-
-    """
-    if payload.startswith("i"):
-        return KebaResponse.BROADCAST
-
-    if payload.startswith('"Firmware'):
-        return KebaResponse.BASIC_INFO
-
-    if "TCH-OK :done" in payload:
-        return KebaResponse.TCH_OK
-
-    if "TCH-ERR" in payload:
-        return KebaResponse.TCH_ERR
-
-    json_rcv = json.loads(payload)
-    if ID in json_rcv:
-        if int(json_rcv[ID]) == 1:
-            return KebaResponse.REPORT_1
-        if int(json_rcv[ID]) == 2:  # noqa: PLR2004
-            return KebaResponse.REPORT_2
-        if int(json_rcv[ID]) == 3:  # noqa: PLR2004
-            return KebaResponse.REPORT_3
-        if int(json_rcv[ID]) > 100:  # noqa: PLR2004
-            return KebaResponse.REPORT_1XX
-
-    # TODO: PUSH_UPDATE
-    else:
-        return KebaResponse.UNKNOWN
 
 
 class SingletonMeta(type):
@@ -78,7 +24,7 @@ class SingletonMeta(type):
     _lock = threading.Lock()
 
     def __call__(cls, *args: tuple, **kwargs: dict[str, Any]):  # noqa: ANN204
-        """Possible changes to the value of the `__init__` argument do not affect the returned instance."""
+        """Possible changes to `__init__` arguments do not affect the returned instance."""
         if cls._instance is None:
             with cls._lock:
                 if not cls._instance:
@@ -133,7 +79,7 @@ class KebaKeContact(metaclass=SingletonMeta):
 
             self._loop.create_task(listen())
             _LOGGER.debug(
-                "Socket binding created (%s) and listening started on port %d.", bind_ip, UDP_PORT
+                "Socket binding created (%s) and listening started on port %d", bind_ip, UDP_PORT
             )
 
     async def _internal_callback(self, data: bytes, remote_addr: tuple) -> None:
@@ -166,7 +112,7 @@ class KebaKeContact(metaclass=SingletonMeta):
         # Non waiting response -> push response to corresponding charging station
         if host not in self._charging_stations:
             _LOGGER.info(
-                "Received a message from a not yet registered charging station at %s.", host
+                "Received a message from a not yet registered charging station at %s", host
             )
         else:
             charging_station = self._charging_stations.get(host)
@@ -185,7 +131,7 @@ class KebaKeContact(metaclass=SingletonMeta):
             ChargingStationInfo: charging stations device info
 
         """
-        _LOGGER.debug("Schedule requesting device info from %s", host)
+        _LOGGER.debug("Schedule a request for device info from %s", host)
 
         # Add response listener
         waiting_key = (KebaResponse.REPORT_1, host)
@@ -198,9 +144,9 @@ class KebaKeContact(metaclass=SingletonMeta):
             await asyncio.wait_for(receive_event.wait(), timeout=self._timeout)
         except asyncio.TimeoutError as exc:
             _LOGGER.warning(
-                "Charging station at %s has not replied within %ds. Abort.", host, self._timeout
+                "Charging station at %s has not replied within %ds. Abort", host, self._timeout
             )
-            raise SetupError("Could not get device info") from exc
+            raise SetupError("Could not get device info for {s}") from exc
         return ChargingStationInfo(host, json.loads(self._waiting_response.pop(waiting_key, None)))
 
     ####################################################
@@ -217,7 +163,7 @@ class KebaKeContact(metaclass=SingletonMeta):
             List[str]: List of found hosts
 
         """
-        _LOGGER.info("Start discover of charging station by broadcasting to %s", broadcast_addr)
+        _LOGGER.info("Start discovering of charging station by broadcasting to %s", broadcast_addr)
 
         # Add response listener and prepare response list
         waiting_key = (KebaResponse.BASIC_INFO, None)
@@ -238,7 +184,7 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         Args:
             host (str): host of charging station to add to the connection handler
-            **kwargs (dict[str, Any]): additional parameters
+            **kwargs (dict[str, Any]): additional parameters for the charging station
 
         Raises:
             SetupError: Setup error will occur if timeout is reached
@@ -249,9 +195,9 @@ class KebaKeContact(metaclass=SingletonMeta):
         """
         _LOGGER.info("Start setup of charging station at %s", host)
 
-        # check if charging station is already configured
+        # Check if charging station is already configured
         if host in self._charging_stations:
-            _LOGGER.info("charging station at %s already configured. Return existing object.", host)
+            _LOGGER.info("Charging station at %s already configured. Return existing object", host)
             return self._charging_stations.get(host)
 
         # Get device info
@@ -259,10 +205,10 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         # Check if charging station with same id (serial number) already exists
         for charging_station in self.get_charging_stations():
-            if charging_station.device_info.device_id == device_info_new.device_id:
+            if charging_station.device_info == device_info_new:
                 _LOGGER.info(
                     "Found a charging station (Serial: %s %s) on a different IP address (%s). "
-                    + "Updating device info.",
+                    + "Updating device info",
                     device_info_new.device_id,
                     charging_station.device_info.host,
                     device_info_new.host,
@@ -276,12 +222,12 @@ class KebaKeContact(metaclass=SingletonMeta):
                 charging_station.update_device_info(device_info_new)
                 return charging_station
 
-        # charging station not known, thus create a new instance for it
+        # charging station not yet known, thus create a new instance for it
         charging_station = ChargingStation(self, device_info_new, self._loop, **kwargs)
         self._charging_stations.update({host: charging_station})
 
         _LOGGER.info(
-            "%s charging station (Serial: %s) at %s successfully connected.",
+            "%s charging station (Serial: %s) at %s successfully connected",
             device_info_new.manufacturer,
             device_info_new.device_id,
             device_info_new.host,
@@ -299,10 +245,10 @@ class KebaKeContact(metaclass=SingletonMeta):
             charging_station = self.get_charging_station(host)
             charging_station.stop_periodic_request()
             self._charging_stations.pop(host)
-            _LOGGER.info("charging station at %s removed.", host)
+            _LOGGER.info("Charging station at %s removed", host)
         else:
             _LOGGER.warning(
-                "charging station at %s could not be removed as it was not configured.", host
+                "Charging station at %s could not be removed as it was not configured", host
             )
 
     def get_charging_stations(self) -> list[ChargingStation]:
@@ -336,7 +282,7 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         """
         if self._stream is None:
-            _LOGGER.fatal("Cannot send data to the charging station. Setup failed.")
+            _LOGGER.fatal("Cannot send data, invalid connection")
             return
 
         async with self._sending_lock:
@@ -346,27 +292,3 @@ class KebaKeContact(metaclass=SingletonMeta):
             await asyncio.sleep(
                 max(blocking_time, 0.1)
             )  # Sleep for blocking time but at least 100 ms
-
-
-class SetupError(Exception):
-    """Error to indicate we cannot connect."""
-
-
-async def create_keba_connection(
-    loop: asyncio.AbstractEventLoop | None = None, timeout: int = 3, bind_ip: str = "0.0.0.0"
-) -> KebaKeContact:
-    """Create a KebaKeContact object as keba connection handler.
-
-    Args:
-        loop (asyncio.AbstractEventLoop | None, optional): asyncio loop. Defaults to None.
-        timeout (int, optional): timeout for charging station. Defaults to 3 seconds.
-        bind_ip (str, optional): bind IP address. Defaults to "0.0.0.0".
-
-    Returns:
-        KebaKeContact: keba connection handler
-
-    """
-    loop = asyncio.get_event_loop() if loop is None else loop
-    keba_connection = KebaKeContact(loop, timeout)
-    await keba_connection.init_socket(bind_ip)
-    return keba_connection

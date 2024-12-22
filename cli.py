@@ -9,9 +9,10 @@ import sys
 
 from ifaddr import get_adapters
 
-from keba_kecontact.chargingstation import ChargingStation
-from keba_kecontact.connection import SetupError, create_keba_connection
+from keba_kecontact import create_keba_connection
+from keba_kecontact.connection import ChargingStation
 from keba_kecontact.emulator import Emulator
+from keba_kecontact.utils import SetupError
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -30,10 +31,10 @@ async def client_mode(ips: list[str]) -> None:
     """
     keba = await create_keba_connection()
 
-    def callback1(charging_station: ChargingStation, data) -> None:
+    def callback1(charging_station: ChargingStation, data: dict[str, str]) -> None:
         print(f"Example callback function 1: {charging_station.device_info.device_id}: {data}")
 
-    def callback2(charging_station: ChargingStation, data) -> None:
+    def callback2(charging_station: ChargingStation, data: dict[str, str]) -> None:
         print(f"Example callback function 2: {charging_station.device_info.device_id}: {data}")
 
     for ip in ips[0]:

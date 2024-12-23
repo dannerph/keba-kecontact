@@ -84,7 +84,7 @@ class ChargingStation:
             data (str): payload of datagram
 
         """
-        _LOGGER.info("%s datagram received", self.device_info)
+        _LOGGER.debug("%s datagram received", self.device_info)
         _LOGGER.debug("Data: %s", data.rstrip())
 
         if KebaResponse.TCH_OK in data:
@@ -206,7 +206,7 @@ class ChargingStation:
             self._fast_count += 1
             sleep = self._interval_fast
 
-        _LOGGER.info("Periodic data request executed, now wait for %s seconds", sleep)
+        _LOGGER.debug("Periodic data request executed, now wait for %s seconds", sleep)
         await asyncio.sleep(sleep)
 
         self._polling_task = self._loop.create_task(self._periodic_request())
@@ -479,7 +479,7 @@ class ChargingStation:
             await self.set_ena(True)
             try:
                 await asyncio.wait_for(self._charging_started_event.wait(), timeout=10)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning("Charging process could not be started after 10 seconds. Abort")
                 return False
 

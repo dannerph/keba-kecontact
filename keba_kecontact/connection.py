@@ -89,6 +89,10 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         response_type = get_response_type(data)
 
+        if response_type == KebaResponse.UNKNOWN:
+            _LOGGER.warning("Received unknown response: %s", data)
+            return
+
         # Ignore broadcasted messages ("i")
         if response_type == KebaResponse.BROADCAST:
             return
@@ -142,7 +146,7 @@ class KebaKeContact(metaclass=SingletonMeta):
         await self.send(host, "report 1")
         try:
             await asyncio.wait_for(receive_event.wait(), timeout=self._timeout)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             _LOGGER.warning(
                 "Charging station at %s has not replied within %ds. Abort", host, self._timeout
             )

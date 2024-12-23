@@ -32,7 +32,11 @@ def get_response_type(payload: str) -> KebaResponse:  # noqa: PLR0911
     if KebaResponse.TCH_ERR in payload:
         return KebaResponse.TCH_ERR
 
-    json_rcv = json.loads(payload)
+    try:
+        json_rcv = json.loads(payload)
+    except json.decoder.JSONDecodeError:
+        return KebaResponse.UNKNOWN
+
     if ReportField.ID in json_rcv:
         if int(json_rcv[ReportField.ID]) == 1:
             return KebaResponse.REPORT_1

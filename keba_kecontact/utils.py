@@ -47,7 +47,7 @@ def get_response_type(payload: str) -> KebaResponse:  # noqa: PLR0911
         if int(json_rcv[ReportField.ID]) > 100:
             return KebaResponse.REPORT_1XX
     else:
-        return KebaResponse.UNKNOWN
+        return KebaResponse.PUSH_UPDATE
 
 
 def validate_current(current: int | float) -> None:

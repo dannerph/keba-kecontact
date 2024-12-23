@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "keba_kecontact"
-version = "3.1.0"
+version = "3.1.1"
 authors = [{ name = "Philipp Danner", email = "philipp@danner-web.de" }]
 description = "A python library to communicate with the KEBA charging stations via udp"
 readme = "README.md"
@@ -13,7 +13,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["asyncio_dgram>=2.2.0", "ifaddr>=0.2.0"]
 
 [project.optional-dependencies]

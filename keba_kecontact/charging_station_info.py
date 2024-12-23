@@ -32,22 +32,31 @@ class ChargingStationInfo:
         self.data_logger_integrated = False
 
         # Check if report is of expected structure
-        assert isinstance(report_1, dict), "Report is not of type dict."
-        assert ReportField.ID in report_1, "Report does not contain an ID."
-        assert report_1[ReportField.ID] == "1", "Report is not the expected report 1."
-        assert ReportField.SERIAL in report_1, "Report does not contain SERIAL."
-        assert ReportField.FIRMWARE in report_1, "Report does not contain FIRMWARE."
-        assert ReportField.PRODUCT in report_1, "Report does not contain PRODUCT."
+        if not isinstance(report_1, dict):
+            raise ValueError("Report is not of type dict")
+        if ReportField.ID not in report_1:
+            raise ValueError("Report does not contain an ID")
+        if report_1[ReportField.ID] != "1":
+            raise ValueError("Report is not the expected report 1")
+        if ReportField.SERIAL not in report_1:
+            raise ValueError("Report does not contain SERIAL")
+        if ReportField.FIRMWARE not in report_1:
+            raise ValueError("Report does not contain FIRMWARE")
+        if ReportField.PRODUCT not in report_1:
+            raise ValueError("Report does not contain PRODUCT")
 
         self.device_id: str = report_1[ReportField.SERIAL]
         self.sw_version: str = report_1[ReportField.FIRMWARE]
 
         # Friendly name mapping
         product: str = report_1[ReportField.PRODUCT]
-        self.manufacturer = product.split("-")[0]  # "KC" or "BMW"
-        self.model = product.split("-")[1]  # "P20", "P30" or custom for none Keba branding
-        product_version = product.split("-")[2]  # e.g. "ES230001" or "EC220110"
-        product_features = product.split("-")[3]  # e.g. "00R" for RFID (P20)
+        p_split = product.split("-")
+        if len(p_split) < 4:
+            raise ValueError("Product string is not valid")
+        self.manufacturer = p_split[0]  # "KC" or "BMW"
+        self.model = p_split[1]  # "P20", "P30" or custom for none Keba branding
+        product_version = p_split[2]  # e.g. "ES230001" or "EC220110"
+        product_features = p_split[3]  # e.g. "00R" for RFID (P20)
         if self.manufacturer == "KC":
             self.manufacturer = "KEBA"
             self.services.append(KebaService.SET_OUTPUT)  # not sure if available for all?

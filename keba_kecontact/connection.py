@@ -5,6 +5,7 @@ import json
 import logging
 import socket
 import threading
+from ipaddress import ip_address
 from typing import Any
 
 import asyncio_dgram
@@ -198,6 +199,10 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         """
         _LOGGER.info("Start setup of charging station at %s", host)
+        try:
+            ip_address(host)
+        except ValueError as ex:
+            raise SetupError("Given IP address is not valid") from ex
 
         # Check if charging station is already configured
         if host in self._charging_stations:

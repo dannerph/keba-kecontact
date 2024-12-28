@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "keba_kecontact"
-version = "4.0.2"
+version = "4.1.0"
 authors = [{ name = "Philipp Danner", email = "philipp@danner-web.de" }]
 description = "A python library to communicate with the KEBA charging stations via udp"
 readme = "README.md"

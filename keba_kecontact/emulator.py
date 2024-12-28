@@ -56,7 +56,7 @@ class Emulator:
 
         try:
             if data == "i":
-                payload = '"Firmware":"Emulator v 2.0.0"\n'
+                payload = '"Firmware":"Emulator v 4.1.0"\n'
             elif any(x in data for x in matches_ok):
                 payload = "TCH-OK :done"
             elif "start" in data:
@@ -68,9 +68,9 @@ class Emulator:
                 if i == REPORT_ID_1:
                     payload = {
                         "ID": "1",
-                        "Product": "KC-P30_Emulator",
+                        "Product": "KC-P30-Emulator-000",
                         "Serial": "123456789",
-                        "Firmware": "Emulator v 2.0.0",
+                        "Firmware": "Emulator v 4.1.0",
                         "COM-module": 0,
                         "Sec": 0,
                     }

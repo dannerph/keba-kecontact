@@ -42,7 +42,7 @@ wheels = [
 
 [[package]]
 name = "keba-kecontact"
-version = "3.1.1"
+version = "4.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "asyncio-dgram" },

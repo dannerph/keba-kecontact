@@ -30,6 +30,7 @@ class ChargingStationInfo:
         self.meter_integrated = False
         self.authorization_integrated = False
         self.data_logger_integrated = False
+        self.phase_switch_x2 = False
 
         # Check if report is of expected structure
         if not isinstance(report_1, dict):
@@ -60,6 +61,7 @@ class ChargingStationInfo:
         if self.manufacturer == "KC":
             self.manufacturer = "KEBA"
             self.services.append(KebaService.SET_OUTPUT)  # not sure if available for all?
+            self.phase_switch_x2 = True
 
             if self.model == "P30":
                 self.authorization_integrated = True
@@ -117,7 +119,7 @@ class ChargingStationInfo:
             f"{self.manufacturer} {self.model} ({self.device_id}, {self.sw_version}) at {self.host}"
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         """Equal if device_id is equal."""
         if isinstance(other, ChargingStationInfo):
             return self.device_id == other.device_id
@@ -158,3 +160,12 @@ class ChargingStationInfo:
 
         """
         return KebaService.DISPLAY in self.services
+
+    def has_phase_switch_x2(self) -> bool:
+        """Check if x2 is possible to be used as phase switch output.
+
+        Returns:
+            bool: True if x2 output can be used for phase switching, False otherwise.
+
+        """
+        return self.phase_switch_x2

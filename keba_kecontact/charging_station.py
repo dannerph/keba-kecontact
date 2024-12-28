@@ -219,7 +219,7 @@ class ChargingStation:
         """Add callback function to be called after new data is received."""
         self._callbacks.append(callback)
 
-    def get_value(self, key: str) -> str | None:
+    def get_value(self, key: str | None = None) -> str | None:
         """Get value from internal data state.
 
         Args:
@@ -237,10 +237,7 @@ class ChargingStation:
         except KeyError:
             return None
 
-    async def request_data(
-        self,
-        **kwargs,  # noqa: ANN003
-    ) -> None:
+    async def request_data(self) -> None:
         """Send report 2, report 3 and report 100 requests."""
         await self._send("report 2")
 
@@ -435,6 +432,41 @@ class ChargingStation:
 
         """
         await self._send("unlock")
+
+    async def x2src(self, source: int) -> None:
+        """Set x2src source.
+
+        Args:
+            source (int): Source for X2 output switching
+                0 No phase toggle source is available
+                1 Toggle via OCPP
+                2 Direct toggle command via RESTAPI
+                3 Toggle via Modbus
+                4 Toggle via UDP
+
+        """
+        if not self.device_info.phase_switch_x2:
+            raise NotImplementedError("x2 is not available for the given charging station")
+
+        if not isinstance(source, int) and source >= 0 and source <= 4:
+            raise ValueError("Source must be between 0 and 4.")
+
+        await self._send(f"x2 {source!s}", fast_polling=True)
+
+    async def x2(self, three_phases: bool) -> None:
+        """Set x2 output for phase switching.
+
+        Args:
+            three_phases (bool): True for using all three phases, False for using only one phase.
+
+        """
+        if not self.device_info.phase_switch_x2:
+            raise NotImplementedError("x2 is not available for the given charging station")
+
+        if not isinstance(three_phases, bool):
+            raise ValueError("X2 output parameter must be True or False.")
+
+        await self._send(f"x2 {three_phases!s}", fast_polling=True)
 
     async def set_charging_power(  # noqa: PLR0912, PLR0915
         self,

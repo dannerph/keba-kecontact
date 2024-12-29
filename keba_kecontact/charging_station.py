@@ -472,9 +472,16 @@ class ChargingStation:
         if self._x2_cool_down_lock.locked():
             _LOGGER.error("Phase switch is in cool down mode, try again later")
             return
-        async with self._x2_cool_down_lock:
-            await self._send("x2 1" if three_phases else "x2 0", fast_polling=True)
-            await asyncio.sleep(300)  # Lock further execution for 5 minutes
+
+        await self._x2_cool_down_lock.acquire()
+        await self._send("x2 1" if three_phases else "x2 0", fast_polling=True)
+
+        async def cool_down(lock: asyncio.Lock) -> None:
+            """Release lock after 5 minutes."""
+            await asyncio.sleep(300)
+            lock.release()
+
+        self._loop.create_task(cool_down(self._x2_cool_down_lock))
 
     async def set_charging_power(  # noqa: PLR0912, PLR0915
         self,

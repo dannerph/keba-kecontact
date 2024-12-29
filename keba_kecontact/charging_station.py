@@ -173,7 +173,8 @@ class ChargingStation:
             callback(self, self.data)
 
         if (
-            int(self.get_value(ReportField.STATE)) == 3
+            self.get_value(ReportField.STATE) is not None
+            and int(self.get_value(ReportField.STATE)) == 3
             and ReportField.ID in json_rcv
             and "3" in json_rcv[ReportField.ID]
         ):

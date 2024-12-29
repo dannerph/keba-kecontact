@@ -100,6 +100,8 @@ class Emulator:
                         "Input": 0,
                         "Serial": "15017355",
                         "Sec": 4294967296,
+                        "X2 phaseSwitch source": 4,
+                        "X2 phaseSwitch": 0,
                     }
                 elif i == REPORT_ID_3:
                     payload = {

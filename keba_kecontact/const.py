@@ -53,6 +53,8 @@ class KebaService(StrEnum):
     DISPLAY = "display"
     START = "start"
     STOP = "stop"
+    X2SRC = "x2src"
+    X2 = "x2"
 
 
 class KebaResponse(StrEnum):

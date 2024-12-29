@@ -448,7 +448,7 @@ class ChargingStation:
                 4 Toggle via UDP
 
         """
-        if not self.device_info.phase_switch_x2:
+        if not self.device_info.has_phase_switch_x2():
             raise NotImplementedError("x2 is not available for the given charging station")
 
         if not isinstance(source, int) or source < 0 or source > 4:
@@ -463,7 +463,7 @@ class ChargingStation:
             three_phases (bool): True for using all three phases, False for using only one phase.
 
         """
-        if not self.device_info.phase_switch_x2:
+        if not self.device_info.has_phase_switch_x2():
             raise NotImplementedError("x2 is not available for the given charging station")
 
         if not isinstance(three_phases, bool):

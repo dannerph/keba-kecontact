@@ -30,7 +30,6 @@ class ChargingStationInfo:
         self.meter_integrated = False
         self.authorization_integrated = False
         self.data_logger_integrated = False
-        self.phase_switch_x2 = False
 
         # Check if report is of expected structure
         if not isinstance(report_1, dict):
@@ -61,7 +60,8 @@ class ChargingStationInfo:
         if self.manufacturer == "KC":
             self.manufacturer = "KEBA"
             self.services.append(KebaService.SET_OUTPUT)  # not sure if available for all?
-            self.phase_switch_x2 = True
+            self.services.append(KebaService.X2)
+            self.services.append(KebaService.X2SRC)
 
             if self.model == "P30":
                 self.authorization_integrated = True
@@ -168,4 +168,4 @@ class ChargingStationInfo:
             bool: True if x2 output can be used for phase switching, False otherwise.
 
         """
-        return self.phase_switch_x2
+        return KebaService.X2 in self.services

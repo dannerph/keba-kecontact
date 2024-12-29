@@ -3,11 +3,7 @@
 import json
 import string
 
-from .const import KebaResponse, ReportField
-
-
-class SetupError(Exception):
-    """Error to indicate we cannot connect."""
+from keba_kecontact.const import KebaResponse, ReportField
 
 
 def get_response_type(payload: str) -> KebaResponse:  # noqa: PLR0911

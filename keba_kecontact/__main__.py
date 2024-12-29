@@ -11,9 +11,9 @@ import sys
 from ifaddr import get_adapters
 
 from keba_kecontact import create_keba_connection
-from keba_kecontact.connection import ChargingStation
+from keba_kecontact.charging_station import ChargingStation
+from keba_kecontact.connection import SetupError
 from keba_kecontact.emulator import Emulator
-from keba_kecontact.utils import SetupError
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -64,6 +64,8 @@ async def client_mode(ip: str) -> None:
         if args[0] in method_list:
             func = getattr(charging_station, args[0])
             params = args[1:]
+            # Parse parameters to correct type
+            # TODO
             try:
                 result = await func(*params) if inspect.iscoroutinefunction(func) else func(*params)
                 if result:
@@ -117,10 +119,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="With this CLI you can discover, connect or emulate KEBA charging stations."
     )
-    parser.add_argument("--debug", help="enable debug logs", action="store_true")
+    parser.add_argument("--ip", help="IP to connect to", action="store")
     parser.add_argument("--dis", help="run discovery", action="store_true")
     parser.add_argument("--emu", help="run charging station emulator", action="store_true")
-    parser.add_argument("--ip", help="IP to connect to", action="store")
+    parser.add_argument("--debug", help="enable debug logs", action="store_true")
 
     args = parser.parse_args()
     task = None

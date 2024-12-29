@@ -6,9 +6,11 @@ import logging
 
 import asyncio_dgram
 
+from keba_kecontact import __version__ as version
+from keba_kecontact.const import UDP_PORT
+
 _LOGGER = logging.getLogger(__name__)
 
-UDP_PORT = 7090
 REPORT_ID_1 = 1
 REPORT_ID_2 = 2
 REPORT_ID_3 = 3
@@ -56,7 +58,7 @@ class Emulator:
 
         try:
             if data == "i":
-                payload = '"Firmware":"Emulator v 4.1.0"\n'
+                payload = '"Firmware":"Emulator v ' + version + '"\n'
             elif any(x in data for x in matches_ok):
                 payload = "TCH-OK :done"
             elif "start" in data:
@@ -70,7 +72,7 @@ class Emulator:
                         "ID": "1",
                         "Product": "KC-P30-Emulator-000",
                         "Serial": "123456789",
-                        "Firmware": "Emulator v 4.1.0",
+                        "Firmware": "Emulator v " + version,
                         "COM-module": 0,
                         "Sec": 0,
                     }

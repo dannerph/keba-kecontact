@@ -1,8 +1,10 @@
 """Init file for keba_kecontact."""
 
+__version__ = "4.2.0"
+
 import asyncio
 
-from .connection import KebaKeContact
+from keba_kecontact.connection import KebaKeContact
 
 
 async def create_keba_connection(

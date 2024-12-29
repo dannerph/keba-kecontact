@@ -5,11 +5,12 @@ import datetime
 import json
 import logging
 import math
+from collections.abc import Callable
 from typing import Any
 
-from .charging_station_info import ChargingStationInfo
-from .const import KebaResponse, KebaService, ReportField
-from .utils import validate_current, validate_rfid_class, validate_rfid_tag
+from keba_kecontact.charging_station_info import ChargingStationInfo
+from keba_kecontact.const import KebaResponse, KebaService, ReportField
+from keba_kecontact.utils import validate_current, validate_rfid_class, validate_rfid_tag
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class ChargingStation:
         self.device_info = device_info
         self.data = {}
 
-        self._callbacks = []
+        self._callbacks: Callable[[str], None] = []
 
         # Internal variables
         self._interval = max(refresh_interval_s, 5)  # at least 5 seconds
@@ -215,7 +216,7 @@ class ChargingStation:
     ####################################################
     #                   Functions                      #
     ####################################################
-    def add_callback(self, callback) -> None:
+    def add_callback(self, callback: Callable[[str], None]) -> None:
         """Add callback function to be called after new data is received."""
         self._callbacks.append(callback)
 

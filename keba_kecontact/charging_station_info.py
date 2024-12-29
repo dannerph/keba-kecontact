@@ -2,7 +2,7 @@
 
 import logging
 
-from .const import KebaService, ReportField
+from keba_kecontact.const import KebaService, ReportField
 
 _LOGGER = logging.getLogger(__name__)
 

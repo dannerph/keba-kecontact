@@ -10,12 +10,16 @@ from typing import Any
 
 import asyncio_dgram
 
-from .charging_station import ChargingStation
-from .charging_station_info import ChargingStationInfo
-from .const import UDP_PORT, KebaResponse
-from .utils import SetupError, get_response_type
+from keba_kecontact.charging_station import ChargingStation
+from keba_kecontact.charging_station_info import ChargingStationInfo
+from keba_kecontact.const import UDP_PORT, KebaResponse
+from keba_kecontact.utils import get_response_type
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class SetupError(Exception):
+    """Error to indicate we cannot connect."""
 
 
 class SingletonMeta(type):

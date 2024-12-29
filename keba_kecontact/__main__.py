@@ -7,6 +7,7 @@ import inspect
 import ipaddress
 import logging
 import sys
+from typing import Union
 
 from ifaddr import get_adapters
 
@@ -64,8 +65,21 @@ async def client_mode(ip: str) -> None:
         if args[0] in method_list:
             func = getattr(charging_station, args[0])
             params = args[1:]
+
             # Parse parameters to correct type
-            # TODO
+            for index, (param_name, param) in enumerate(inspect.signature(func).parameters.items()):
+                if index < len(args[1:]):
+                    param_str = args[1 + index]
+                    if param.annotation is bool:
+                        params[index] = bool(param_str)
+                    elif param.annotation is int:
+                        params[index] = int(param_str)
+                    elif param.annotation is float:
+                        params[index] = float(param_str)
+                    elif param.annotation == int | float:
+                        params[index] = float(param_str)
+                    else:
+                        print("could not parse parameter")
             try:
                 result = await func(*params) if inspect.iscoroutinefunction(func) else func(*params)
                 if result:

@@ -49,6 +49,7 @@ class ChargingStation:
             self._polling_task = self._loop.create_task(self._periodic_request())
 
         self._charging_started_event: asyncio.Event = asyncio.Event()
+        self._x2_cool_down_lock: asyncio.Lock = asyncio.Lock()
 
     def __eq__(self, other: Any) -> bool:  # noqa: ANN401
         """Equal if device_info is equal."""
@@ -452,7 +453,7 @@ class ChargingStation:
         if not isinstance(source, int) and source >= 0 and source <= 4:
             raise ValueError("Source must be between 0 and 4.")
 
-        await self._send(f"x2 {source!s}", fast_polling=True)
+        await self._send(f"x2src {source!s}", fast_polling=True)
 
     async def x2(self, three_phases: bool) -> None:
         """Set x2 output for phase switching.
@@ -467,7 +468,12 @@ class ChargingStation:
         if not isinstance(three_phases, bool):
             raise ValueError("X2 output parameter must be True or False.")
 
-        await self._send(f"x2 {three_phases!s}", fast_polling=True)
+        if self._x2_cool_down_lock.locked():
+            _LOGGER.error("Phase switch is in cool down mode, try again later")
+            return
+        async with self._x2_cool_down_lock:
+            await self._send("x2 1" if three_phases else "x2 0", fast_polling=True)
+            await asyncio.sleep(300)  # Lock further execution for 5 minutes
 
     async def set_charging_power(  # noqa: PLR0912, PLR0915
         self,

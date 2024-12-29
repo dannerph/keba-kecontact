@@ -54,6 +54,8 @@ class Emulator:
             "curr",
             "ena",
             "failsafe",
+            "x2src",
+            "x2",
         ]
 
         try:

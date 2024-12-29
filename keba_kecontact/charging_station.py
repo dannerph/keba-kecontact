@@ -450,7 +450,7 @@ class ChargingStation:
         if not self.device_info.phase_switch_x2:
             raise NotImplementedError("x2 is not available for the given charging station")
 
-        if not isinstance(source, int) and source >= 0 and source <= 4:
+        if not isinstance(source, int) or source < 0 or source > 4:
             raise ValueError("Source must be between 0 and 4.")
 
         await self._send(f"x2src {source!s}", fast_polling=True)

@@ -484,10 +484,7 @@ class ChargingStation:
         self._loop.create_task(cool_down(self._x2_cool_down_lock))
 
     async def set_charging_power(  # noqa: PLR0912, PLR0915
-        self,
-        power: int | float,
-        round_up: bool = False,
-        stop_below_6_A: bool = True,  # noqa: N803
+        self, power: int | float, round_up: bool = False, stop_below_6_ampere: bool = True
     ) -> bool:
         """Set charging power.
 
@@ -498,7 +495,7 @@ class ChargingStation:
         Args:
             power (int | float): charging power in kW.
             round_up (bool, optional): _description_. Defaults to False.
-            stop_below_6_A (bool, optional): wether to stop below 6A. Defaults to True.
+            stop_below_6_ampere (bool, optional): wether to stop below 6A. Defaults to True.
 
         Returns:
             bool: _description_
@@ -595,7 +592,7 @@ class ChargingStation:
                     await self.set_ena(True)
 
                 if current < 6.0:
-                    if stop_below_6_A:
+                    if stop_below_6_ampere:
                         await self.set_ena(False)
                     else:
                         await self.set_current(current=6, delay=1)

@@ -137,7 +137,7 @@ class ChargingStation:
         if ReportField.PLUG in json_rcv:
             plug_state = int(json_rcv[ReportField.PLUG])
             json_rcv[ReportField.PLUG_CS] = plug_state > 0
-            json_rcv[ReportField.PLUG_LOCKED] = plug_state == 3 | plug_state == 7
+            json_rcv[ReportField.PLUG_LOCKED] = plug_state in (3, 7)
             json_rcv[ReportField.PLUG_EV] = plug_state > 4
 
         # Extract charging state

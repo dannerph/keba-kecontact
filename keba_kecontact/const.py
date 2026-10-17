@@ -47,6 +47,7 @@ class KebaService(StrEnum):
 
     SET_FAILSAFE = "set_failsafe"
     SET_CURRENT = "set_current"
+    SET_DATETIME = "set_datetime"
     SET_CHARGING_POWER = "set_charging_power"
     SET_ENERGY = "set_energy"
     SET_OUTPUT = "set_output"

@@ -7,7 +7,6 @@ import inspect
 import ipaddress
 import logging
 import sys
-from typing import Union
 
 from ifaddr import get_adapters
 

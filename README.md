@@ -23,9 +23,11 @@ pip install .
 ## Command Line Interface
 
 The module contains a command line interface to connect and send UDP commands, discover charging stations in your local networks and emulate a KEBA charging station for testing purposes. Run
+
 ```bash
 python -m keba_kecontact
 ```
+
 and follow the instructions.
 
 ## Use the module in your code
@@ -35,6 +37,7 @@ The module is written using asyncio and creates a UDP socket to listen for incom
 ```python
 from keba_kecontact import create_keba_connection
 from keba_kecontact.connection import ChargingStation, SetupError
+
 
 async def connect(ip: str) -> None:
     keba = await create_keba_connection()

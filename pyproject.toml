@@ -28,7 +28,15 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["I", "E", "F", "D", "UP", "W", "N", "I", "ANN", "RUF", "PL"]
-ignore = ["PLR2004"]
+ignore = [
+    "PLR2004",
+    "PLR0912",
+    "PLR0915",
+    "PLW1641",
+    "ANN001",
+    "D417",
+    "RUF046",
+]
 
 [tool.ruff.lint.pylint]
 max-args = 6

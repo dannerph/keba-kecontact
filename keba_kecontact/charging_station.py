@@ -79,7 +79,7 @@ class ChargingStation:
                 self.device_info.host,
             )
 
-    async def datagram_received(self, data: str) -> None:  # noqa: PLR0912
+    async def datagram_received(self, data: str) -> None:
         """Handle received datagram.
 
         Args:
@@ -357,6 +357,27 @@ class ChargingStation:
 
         await self._send(f"setenergy {int(round(energy * 10000))}", fast_polling=True)
 
+    async def set_datetime(self, timestamp: int | float | None = None) -> None:
+        """Set date and time of the charging station.
+
+        Args:
+            timestamp (int | float | None, optional): Unix epoch time in seconds.
+                If omitted, the current system time is used.
+
+        """
+        if KebaService.SET_DATETIME not in self.device_info.services:
+            raise NotImplementedError(
+                "set_datetime is not available for the given charging station"
+            )
+
+        if timestamp is None:
+            timestamp = datetime.datetime.now(datetime.UTC).timestamp()
+
+        if not isinstance(timestamp, int | float) or timestamp < 0:
+            raise ValueError("Timestamp must be a non-negative Unix epoch value.")
+
+        await self._send(f"setdatetime {int(timestamp)}")
+
     async def set_output(self, out: int) -> None:
         """Set output.
 
@@ -483,7 +504,7 @@ class ChargingStation:
 
         self._loop.create_task(cool_down(self._x2_cool_down_lock))
 
-    async def set_charging_power(  # noqa: PLR0912, PLR0915
+    async def set_charging_power(
         self, power: int | float, round_up: bool = False, stop_below_6_ampere: bool = True
     ) -> bool:
         """Set charging power.

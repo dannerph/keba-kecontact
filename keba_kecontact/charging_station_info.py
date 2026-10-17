@@ -64,6 +64,7 @@ class ChargingStationInfo:
             self.services.append(KebaService.X2SRC)
 
             if self.model == "P30":
+                self.services.append(KebaService.SET_DATETIME)
                 self.authorization_integrated = True
                 self.data_logger_integrated = True
                 if "KC-P30-EC220112-000-DE" in product:  # Special case DE-Wallbox

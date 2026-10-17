@@ -215,6 +215,7 @@ def test_charging_station_info_valid_P30() -> None:  # noqa: N802
     assert info.is_meter_integrated()
     assert KebaService.START in info.services
     assert KebaService.STOP in info.services
+    assert KebaService.SET_DATETIME in info.services
 
     # P30 DE
     report_1 = {
@@ -233,6 +234,7 @@ def test_charging_station_info_valid_P30() -> None:  # noqa: N802
     assert not info.is_meter_integrated()
     assert KebaService.START in info.services
     assert KebaService.STOP in info.services
+    assert KebaService.SET_DATETIME in info.services
 
 
 def test_charging_station_info_eq() -> None:

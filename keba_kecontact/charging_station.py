@@ -131,7 +131,7 @@ class ChargingStation:
             ReportField.E_START,
         ]
         for k in ten_thousands:
-            json_rcv[k] = round(json_rcv[k] / 10000.0, 2)
+            json_rcv[k] = json_rcv[k] / 10000.0
 
         # Extract plug state
         if ReportField.PLUG in json_rcv:
@@ -160,7 +160,7 @@ class ChargingStation:
             json_rcv[ReportField.FS_ON] = json_rcv[ReportField.TMO_FS] > 0
 
         if ReportField.P in json_rcv:
-            json_rcv[ReportField.P] = round(json_rcv[ReportField.P] / 1000000.0, 2)
+            json_rcv[ReportField.P] = json_rcv[ReportField.P] / 1000000.0
 
         # Cleanup invalid values
         if ReportField.CURR_HW in json_rcv and json_rcv[ReportField.CURR_HW] == 0:

@@ -45,3 +45,8 @@ max-args = 6
 docstring-code-format = true
 docstring-code-line-length = 100
 skip-magic-trailing-comma = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+]

@@ -264,6 +264,16 @@ class KebaKeContact(metaclass=SingletonMeta):
                 "Charging station at %s could not be removed as it was not configured", host
             )
 
+    def close(self) -> None:
+        """Close the UDP socket and release the port."""
+        for charging_station in self.get_charging_stations():
+            charging_station.stop_periodic_request()
+        self._charging_stations.clear()
+        if self._stream is not None:
+            self._stream.close()
+            self._stream = None
+        _LOGGER.debug("UDP socket closed")
+
     def get_charging_stations(self) -> list[ChargingStation]:
         """Get a list of all configured charging stations.
 

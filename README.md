@@ -45,7 +45,13 @@ async def connect(ip: str) -> None:
         charging_station = await keba.setup_charging_station(ip, periodic_request=False)
     except SetupError as ex:
         print(f"Charging station at {ip} could not be set up: {ex}")
+    finally:
+        keba.close()
 ```
+
+`setup_charging_station` accepts an IPv4 address or a hostname. Hostnames are
+resolved when the charging station is set up. Call `close()` after all charging
+stations are no longer needed to stop polling and release the UDP socket.
 
 ## Support Development
 

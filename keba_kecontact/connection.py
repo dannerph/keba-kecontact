@@ -46,12 +46,14 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         # Data structures
         self._charging_stations: dict[str, ChargingStation] = {}
+        self._host_aliases: dict[str, str] = {}
         self._timeout: int = timeout
         self._waiting_list: dict[(KebaResponse, str), asyncio.Event] = {}
         self._waiting_response: dict[(KebaResponse, str), Any] = {}
 
         self._sending_lock: asyncio.Lock = asyncio.Lock()
         self._stream: asyncio_dgram.DatagramServer = None
+        self._listen_task: asyncio.Task | None = None
 
     ####################################################
     #             Connection management                #
@@ -78,11 +80,11 @@ class KebaKeContact(metaclass=SingletonMeta):
 
             # Start listening on the port to handle responses
             async def listen() -> None:
-                data, remote_addr = await self._stream.recv()
-                self._loop.create_task(listen())
-                self._loop.create_task(self._internal_callback(data, remote_addr))
+                while True:
+                    data, remote_addr = await self._stream.recv()
+                    self._loop.create_task(self._internal_callback(data, remote_addr))
 
-            self._loop.create_task(listen())
+            self._listen_task = self._loop.create_task(listen())
             _LOGGER.debug(
                 "Socket binding created (%s) and listening started on port %d", bind_ip, UDP_PORT
             )
@@ -140,6 +142,7 @@ class KebaKeContact(metaclass=SingletonMeta):
             ChargingStationInfo: charging stations device info
 
         """
+        host = await self._resolve_host(host)
         _LOGGER.debug("Schedule a request for device info from %s", host)
 
         # Add response listener
@@ -148,15 +151,33 @@ class KebaKeContact(metaclass=SingletonMeta):
         self._waiting_list.update({waiting_key: receive_event})
 
         # Send and wait for positive response from host
-        await self.send(host, "report 1")
         try:
+            await self.send(host, "report 1")
             await asyncio.wait_for(receive_event.wait(), timeout=self._timeout)
+            return ChargingStationInfo(host, json.loads(self._waiting_response[waiting_key]))
         except TimeoutError as exc:
             _LOGGER.warning(
                 "Charging station at %s has not replied within %ds. Abort", host, self._timeout
             )
             raise SetupError("Could not get device info for {s}") from exc
-        return ChargingStationInfo(host, json.loads(self._waiting_response.pop(waiting_key, None)))
+        finally:
+            self._waiting_list.pop(waiting_key, None)
+            self._waiting_response.pop(waiting_key, None)
+
+    async def _resolve_host(self, host: str) -> str:
+        try:
+            address = ip_address(host)
+        except ValueError:
+            try:
+                addresses = await self._loop.getaddrinfo(
+                    host, UDP_PORT, family=socket.AF_INET, type=socket.SOCK_DGRAM
+                )
+            except OSError as exc:
+                raise SetupError(f"Could not resolve host {host}") from exc
+            return addresses[0][4][0]
+        if address.version != 4:
+            raise SetupError("Only IPv4 addresses are supported")
+        return str(address)
 
     ####################################################
     #               Public Functions                   #
@@ -203,14 +224,13 @@ class KebaKeContact(metaclass=SingletonMeta):
 
         """
         _LOGGER.info("Start setup of charging station at %s", host)
-        try:
-            ip_address(host)
-        except ValueError as ex:
-            raise SetupError("Given IP address is not valid") from ex
+        input_host = host
+        host = await self._resolve_host(host)
 
         # Check if charging station is already configured
         if host in self._charging_stations:
             _LOGGER.info("Charging station at %s already configured. Return existing object", host)
+            self._host_aliases[input_host] = host
             return self._charging_stations.get(host)
 
         # Get device info
@@ -230,6 +250,11 @@ class KebaKeContact(metaclass=SingletonMeta):
                 self._charging_stations[host] = self._charging_stations.pop(
                     charging_station.device_info.host
                 )
+                self._host_aliases = {
+                    alias: host if address == charging_station.device_info.host else address
+                    for alias, address in self._host_aliases.items()
+                }
+                self._host_aliases[input_host] = host
 
                 # update charging station device info
                 charging_station.update_device_info(device_info_new)
@@ -238,6 +263,7 @@ class KebaKeContact(metaclass=SingletonMeta):
         # charging station not yet known, thus create a new instance for it
         charging_station = ChargingStation(self, device_info_new, self._loop, **kwargs)
         self._charging_stations.update({host: charging_station})
+        self._host_aliases[input_host] = host
 
         _LOGGER.info(
             "%s charging station (Serial: %s) at %s successfully connected",
@@ -254,10 +280,14 @@ class KebaKeContact(metaclass=SingletonMeta):
             host (str): host of the charging station
 
         """
+        host = self._host_aliases.get(host, host)
         if host in self._charging_stations:
             charging_station = self.get_charging_station(host)
             charging_station.stop_periodic_request()
             self._charging_stations.pop(host)
+            self._host_aliases = {
+                alias: address for alias, address in self._host_aliases.items() if address != host
+            }
             _LOGGER.info("Charging station at %s removed", host)
         else:
             _LOGGER.warning(
@@ -269,6 +299,10 @@ class KebaKeContact(metaclass=SingletonMeta):
         for charging_station in self.get_charging_stations():
             charging_station.stop_periodic_request()
         self._charging_stations.clear()
+        self._host_aliases.clear()
+        if self._listen_task is not None:
+            self._listen_task.cancel()
+            self._listen_task = None
         if self._stream is not None:
             self._stream.close()
             self._stream = None
@@ -293,7 +327,7 @@ class KebaKeContact(metaclass=SingletonMeta):
             ChargingStation: charging station object of given host
 
         """
-        return self._charging_stations.get(host)
+        return self._charging_stations.get(self._host_aliases.get(host, host))
 
     async def send(self, host: str, payload: str, blocking_time: int = 0.1) -> None:
         """Send a payload to the charging station with given host.
